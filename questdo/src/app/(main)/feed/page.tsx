@@ -304,7 +304,7 @@ export default function FeedPage() {
             </div>
           ) : posts.length === 0 ? (
             <div className="flex flex-col items-center py-16 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F5F5F7] dark:bg-[#2C2C2E] mb-4">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary dark:bg-[#2C2C2E] mb-4">
                 <Users className="h-7 w-7 text-muted-foreground" />
               </div>
               <p className="text-[15px] font-medium">
@@ -433,7 +433,7 @@ export default function FeedPage() {
                                   {comment.userAvatar || '?'}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <div className="rounded-xl bg-[#F5F5F7] dark:bg-[#2C2C2E] px-3 py-2">
+                                  <div className="rounded-xl bg-secondary dark:bg-[#2C2C2E] px-3 py-2">
                                     <span className="text-[11px] font-semibold">{comment.userNickname}</span>
                                     <p className="text-[12px] leading-relaxed mt-0.5">{comment.text}</p>
                                   </div>
@@ -449,7 +449,7 @@ export default function FeedPage() {
                               value={commentText}
                               onChange={(e) => setCommentText(e.target.value)}
                               placeholder={lang === 'ko' ? '댓글을 입력하세요...' : 'Write a comment...'}
-                              className="flex-1 h-9 rounded-full text-[13px] bg-[#F5F5F7] dark:bg-[#2C2C2E] border-0"
+                              className="flex-1 h-9 rounded-full text-[13px] bg-secondary dark:bg-[#2C2C2E] border-0"
                               maxLength={200}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -479,7 +479,7 @@ export default function FeedPage() {
 
         <TabsContent value="following" className="mt-4">
           <div className="flex flex-col items-center py-16 text-center">
-            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-[#F5F5F7] dark:bg-[#2C2C2E] mb-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary dark:bg-[#2C2C2E] mb-4">
               <Users className="h-7 w-7 text-muted-foreground" />
             </div>
             <p className="text-[15px] font-medium">
@@ -516,7 +516,7 @@ export default function FeedPage() {
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
               placeholder={lang === 'ko' ? '오늘의 성과나 생각을 공유해보세요...' : 'Share your thoughts...'}
-              className="min-h-[120px] rounded-xl resize-none text-[14px] bg-[#F5F5F7] dark:bg-[#2C2C2E] border-0 focus-visible:ring-1 focus-visible:ring-primary"
+              className="min-h-[120px] rounded-xl resize-none text-[14px] bg-secondary dark:bg-[#2C2C2E] border-0 focus-visible:ring-1 focus-visible:ring-primary"
               maxLength={300}
             />
 

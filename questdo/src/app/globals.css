@@ -47,7 +47,7 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
-/* ─── Apple Light ─── */
+/* ─── Clean White Light ─── */
 :root {
   --radius: 0.75rem;
   --background: #FFFFFF;
@@ -58,28 +58,28 @@
   --popover-foreground: #1D1D1F;
   --primary: #007AFF;
   --primary-foreground: #FFFFFF;
-  --secondary: #F5F5F7;
+  --secondary: #F9F9FB;
   --secondary-foreground: #1D1D1F;
-  --muted: #F5F5F7;
+  --muted: #F9F9FB;
   --muted-foreground: #86868B;
-  --accent: #F5F5F7;
+  --accent: #F9F9FB;
   --accent-foreground: #1D1D1F;
   --destructive: #FF3B30;
-  --border: rgba(0, 0, 0, 0.06);
-  --input: rgba(0, 0, 0, 0.06);
+  --border: rgba(0, 0, 0, 0.04);
+  --input: rgba(0, 0, 0, 0.04);
   --ring: #007AFF;
   --chart-1: #007AFF;
   --chart-2: #34C759;
   --chart-3: #FF9500;
   --chart-4: #AF52DE;
   --chart-5: #FF2D55;
-  --sidebar: rgba(255, 255, 255, 0.72);
+  --sidebar: #FFFFFF;
   --sidebar-foreground: #1D1D1F;
   --sidebar-primary: #007AFF;
   --sidebar-primary-foreground: #FFFFFF;
   --sidebar-accent: #F5F5F7;
   --sidebar-accent-foreground: #1D1D1F;
-  --sidebar-border: rgba(0, 0, 0, 0.06);
+  --sidebar-border: rgba(0, 0, 0, 0.04);
   --sidebar-ring: #007AFF;
 }
 
@@ -148,24 +148,24 @@
 
 /* ─── Glass morphism utilities ─── */
 .glass {
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.95);
   backdrop-filter: saturate(180%) blur(20px);
   -webkit-backdrop-filter: saturate(180%) blur(20px);
 }
 .dark .glass {
-  background: rgba(28, 28, 30, 0.72);
+  background: rgba(28, 28, 30, 0.85);
 }
 
-/* ─── Apple-style card shadows ─── */
+/* ─── Clean card style ─── */
 .apple-card {
-  background: var(--card);
+  background: #FFFFFF;
   border-radius: 1rem;
-  border: 1px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
   transition: box-shadow 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 .apple-card:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04), 0 4px 16px rgba(0, 0, 0, 0.03);
 }
 .dark .apple-card {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
@@ -174,9 +174,9 @@
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-/* ─── Apple-style section background ─── */
+/* ─── Section alt background ─── */
 .apple-section-alt {
-  background: #F5F5F7;
+  background: #FAFAFA;
 }
 .dark .apple-section-alt {
   background: #1C1C1E;

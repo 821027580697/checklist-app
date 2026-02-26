@@ -50,7 +50,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-white dark:bg-[#000000] overflow-hidden">
+    <div className="min-h-screen bg-background overflow-hidden">
       {/* ─── 히어로 섹션 ─── */}
       <section className="relative flex min-h-screen flex-col items-center justify-center px-6 text-center">
         {/* 배경 그라데이션 — Apple 스타일 */}

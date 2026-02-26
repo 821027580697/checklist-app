@@ -49,7 +49,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-white dark:bg-[#000000] px-6">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
       {/* 배경 그라데이션 */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute left-1/2 top-1/4 -translate-x-1/2 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-[#007AFF]/6 to-[#5856D6]/4 blur-[100px]" />
@@ -80,7 +80,7 @@ export default function LoginPage() {
         <div className="space-y-4">
           <Button
             variant="outline"
-            className="w-full h-12 rounded-2xl text-[15px] font-medium border-border/60 bg-white dark:bg-[#1C1C1E] hover:bg-[#F5F5F7] dark:hover:bg-[#2C2C2E] shadow-sm transition-all duration-200 hover:shadow-md"
+            className="w-full h-12 rounded-2xl text-[15px] font-medium border-border/60 bg-background hover:bg-secondary dark:hover:bg-[#2C2C2E] shadow-sm transition-all duration-200 hover:shadow-md"
             onClick={handleGoogleLogin}
             disabled={isSubmitting}
           >

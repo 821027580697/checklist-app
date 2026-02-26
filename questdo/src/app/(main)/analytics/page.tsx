@@ -155,7 +155,7 @@ export default function AnalyticsPage() {
         <Card className="border-border/50">
           <CardContent className="py-16 text-center">
             <div className="flex flex-col items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F5F5F7] dark:bg-[#2C2C2E]">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary dark:bg-[#2C2C2E]">
                 <ListTodo className="h-6 w-6 text-muted-foreground" />
               </div>
               <div>
