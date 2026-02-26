@@ -1,7 +1,7 @@
 // 온보딩 페이지 — 닉네임, 아바타, 관심 카테고리 설정
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Check, ChevronRight, ChevronLeft, Sparkles } from 'lucide-react';
 import { TaskCategory } from '@/types/task';
+import { User } from '@/types/user';
 
 // 온보딩 3단계
 const STEPS = ['nickname', 'avatar', 'category'] as const;
@@ -24,6 +25,8 @@ const STEPS = ['nickname', 'avatar', 'category'] as const;
 export default function OnboardingPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const { isAuthenticated, needsOnboarding, isLoading, firebaseUid } = useAuthStore();
+  const setUser = useAuthStore((state) => state.setUser);
   const setNeedsOnboarding = useAuthStore((state) => state.setNeedsOnboarding);
 
   const [step, setStep] = useState(0);
@@ -32,6 +35,16 @@ export default function OnboardingPage() {
   const [selectedAvatar, setSelectedAvatar] = useState(0);
   const [selectedCategories, setSelectedCategories] = useState<TaskCategory[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 온보딩이 필요 없으면 리다이렉트
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated && !needsOnboarding) {
+      router.replace('/dashboard');
+    } else if (!firebaseUid && !needsOnboarding) {
+      router.replace('/login');
+    }
+  }, [isAuthenticated, needsOnboarding, isLoading, firebaseUid, router]);
 
   // 닉네임 중복 체크 (디바운스 적용)
   const handleNicknameChange = useCallback(async (value: string) => {
@@ -85,23 +98,35 @@ export default function OnboardingPage() {
 
     setIsSubmitting(true);
     try {
-      const avatarUrl = `/badges/avatar-${selectedAvatar + 1}.svg`;
-      const { error } = await createUserDocument(currentUser, nickname, avatarUrl);
+      const avatarUrl = AVATAR_EMOJIS[selectedAvatar] || '🧑‍💻';
+      const { data, error } = await createUserDocument(currentUser, nickname, avatarUrl);
 
-      if (error) {
-        toast.error('프로필 설정에 실패했습니다');
+      if (error || !data) {
+        toast.error('프로필 설정에 실패했습니다. 다시 시도해주세요.');
+        setIsSubmitting(false);
         return;
       }
 
+      // 생성된 사용자 데이터를 스토어에 설정 → isAuthenticated: true
+      setUser(data as User);
       setNeedsOnboarding(false);
+
       toast.success('QuestDo에 오신 것을 환영합니다! 🎉');
-      router.push('/dashboard');
+      router.replace('/dashboard');
     } catch {
       toast.error('오류가 발생했습니다');
-    } finally {
       setIsSubmitting(false);
     }
   };
+
+  // 로딩 중이면 스피너
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -117,9 +142,10 @@ export default function OnboardingPage() {
       >
         {/* 로고 */}
         <div className="mb-6 text-center">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
-            QuestDo
-          </h1>
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-xl bg-primary mb-3">
+            <span className="text-xl font-bold text-white">Q</span>
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">프로필 설정</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('onboarding.title')}</p>
         </div>
 

@@ -1,7 +1,7 @@
 // 회원가입 페이지 — Apple 스타일
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { signUpWithEmail, signInWithGoogle } from '@/lib/firebase/auth';
+import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { toast } from 'sonner';
 import { Eye, EyeOff } from 'lucide-react';
@@ -17,11 +18,22 @@ import { Eye, EyeOff } from 'lucide-react';
 export default function SignupPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const { isAuthenticated, needsOnboarding, isLoading } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 상태 기반 리다이렉트 — AuthProvider가 상태를 설정하면 자동으로 이동
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) {
+      router.replace('/dashboard');
+    } else if (needsOnboarding) {
+      router.replace('/onboarding');
+    }
+  }, [isAuthenticated, needsOnboarding, isLoading, router]);
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,45 +50,47 @@ export default function SignupPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
-      const { user, error } = await signUpWithEmail(email, password);
+      const { error, message } = await signUpWithEmail(email, password);
       if (error) {
-        if (error.message.includes('email-already-in-use')) {
-          toast.error('이미 사용 중인 이메일입니다');
-        } else {
-          toast.error('회원가입에 실패했습니다');
-        }
+        toast.error(message || '회원가입에 실패했습니다');
+        setIsSubmitting(false);
         return;
       }
-      if (user) {
-        toast.success('회원가입 성공! 프로필을 설정해주세요');
-        router.push('/onboarding');
-      }
+      // 성공 시 AuthProvider의 onAuthStateChanged가 상태를 업데이트
+      // → needsOnboarding=true → useEffect에서 /onboarding으로 리다이렉트
+      toast.success('회원가입 성공! 프로필을 설정해주세요');
     } catch {
       toast.error('오류가 발생했습니다');
-    } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleSignup = async () => {
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
-      const { user, error } = await signInWithGoogle();
+      const { error, message } = await signInWithGoogle();
       if (error) {
-        toast.error('Google 로그인에 실패했습니다');
+        toast.error(message || 'Google 로그인에 실패했습니다');
+        setIsSubmitting(false);
         return;
       }
-      if (user) {
-        router.push('/onboarding');
-      }
+      // AuthProvider가 상태를 판단하여 자동 리다이렉트
     } catch {
       toast.error('오류가 발생했습니다');
-    } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
+
+  // 이미 인증된 사용자는 화면을 보여줄 필요 없음
+  if (isAuthenticated || needsOnboarding) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
@@ -110,7 +124,7 @@ export default function SignupPage() {
             variant="outline"
             className="w-full h-11 rounded-xl text-[13px] font-medium"
             onClick={handleGoogleSignup}
-            disabled={isLoading}
+            disabled={isSubmitting}
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -139,7 +153,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-11 rounded-xl text-[14px] bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
-                disabled={isLoading}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -153,7 +167,7 @@ export default function SignupPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11 rounded-xl text-[14px] pr-10 bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
                 <Button
                   type="button"
@@ -176,16 +190,16 @@ export default function SignupPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="h-11 rounded-xl text-[14px] bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
-                disabled={isLoading}
+                disabled={isSubmitting}
               />
             </div>
 
             <Button
               type="submit"
               className="w-full h-11 rounded-xl text-[14px] font-semibold mt-1"
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
-              {isLoading ? '가입 중...' : t('auth.signup')}
+              {isSubmitting ? '가입 중...' : t('auth.signup')}
             </Button>
           </form>
 

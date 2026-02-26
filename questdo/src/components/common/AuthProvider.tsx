@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { onAuthChange, getUserDocument, checkUserExists } from '@/lib/firebase/auth';
+import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { User } from '@/types/user';
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -13,6 +14,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const setNeedsOnboarding = useAuthStore((state) => state.setNeedsOnboarding);
 
   useEffect(() => {
+    // Firebase가 설정되지 않은 경우 로딩만 해제
+    if (!isFirebaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     // Firebase 인증 상태 변경 리스너
     const unsubscribe = onAuthChange(async (firebaseUser) => {
       if (firebaseUser) {
@@ -25,13 +32,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // 사용자 문서가 있으면 로드
           const { data } = await getUserDocument(firebaseUser.uid);
           if (data) {
-            setUser(data as User);
             setNeedsOnboarding(false);
+            setUser(data as User); // setUser가 isLoading=false, isAuthenticated=true로 설정
+          } else {
+            // 문서가 있다고 했는데 로드 실패 — 재시도 또는 에러
+            setNeedsOnboarding(true);
+            setLoading(false);
           }
         } else {
           // 사용자 문서가 없으면 온보딩 필요
           setNeedsOnboarding(true);
-          setUser(null);
           setLoading(false);
         }
       } else {

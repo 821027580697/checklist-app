@@ -1,7 +1,7 @@
 // 로그인 페이지 — Apple ID 스타일
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { signInWithEmail, signInWithGoogle } from '@/lib/firebase/auth';
+import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { toast } from 'sonner';
 import { Eye, EyeOff } from 'lucide-react';
@@ -17,10 +18,21 @@ import { Eye, EyeOff } from 'lucide-react';
 export default function LoginPage() {
   const router = useRouter();
   const { t } = useTranslation();
+  const { isAuthenticated, needsOnboarding, isLoading } = useAuthStore();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 상태 기반 리다이렉트 — AuthProvider가 상태를 설정하면 자동으로 이동
+  useEffect(() => {
+    if (isLoading) return;
+    if (isAuthenticated) {
+      router.replace('/dashboard');
+    } else if (needsOnboarding) {
+      router.replace('/onboarding');
+    }
+  }, [isAuthenticated, needsOnboarding, isLoading, router]);
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,41 +41,47 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
-      const { user, error } = await signInWithEmail(email, password);
+      const { error, message } = await signInWithEmail(email, password);
       if (error) {
-        toast.error('로그인에 실패했습니다. 이메일과 비밀번호를 확인해주세요.');
+        toast.error(message || '로그인에 실패했습니다');
+        setIsSubmitting(false);
         return;
       }
-      if (user) {
-        toast.success('로그인 성공!');
-        router.push('/dashboard');
-      }
+      // 성공 시 AuthProvider의 onAuthStateChanged가 상태를 업데이트
+      // → isAuthenticated=true → useEffect에서 /dashboard로 리다이렉트
+      toast.success('로그인 성공!');
     } catch {
       toast.error('오류가 발생했습니다');
-    } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
   const handleGoogleLogin = async () => {
-    setIsLoading(true);
+    setIsSubmitting(true);
     try {
-      const { user, error } = await signInWithGoogle();
+      const { error, message } = await signInWithGoogle();
       if (error) {
-        toast.error('Google 로그인에 실패했습니다');
+        toast.error(message || 'Google 로그인에 실패했습니다');
+        setIsSubmitting(false);
         return;
       }
-      if (user) {
-        router.push('/dashboard');
-      }
+      // AuthProvider가 상태를 판단하여 자동 리다이렉트
     } catch {
       toast.error('오류가 발생했습니다');
-    } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
+
+  // 이미 인증된 사용자는 로딩 스피너 표시
+  if (isAuthenticated || needsOnboarding) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
@@ -97,7 +115,7 @@ export default function LoginPage() {
             variant="outline"
             className="w-full h-11 rounded-xl text-[13px] font-medium"
             onClick={handleGoogleLogin}
-            disabled={isLoading}
+            disabled={isSubmitting}
           >
             <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
               <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
@@ -126,7 +144,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="h-11 rounded-xl text-[14px] bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
-                disabled={isLoading}
+                disabled={isSubmitting}
               />
             </div>
 
@@ -140,7 +158,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="h-11 rounded-xl text-[14px] pr-10 bg-secondary/50 border-0 focus-visible:ring-1 focus-visible:ring-primary"
-                  disabled={isLoading}
+                  disabled={isSubmitting}
                 />
                 <Button
                   type="button"
@@ -157,9 +175,9 @@ export default function LoginPage() {
             <Button
               type="submit"
               className="w-full h-11 rounded-xl text-[14px] font-semibold mt-1"
-              disabled={isLoading}
+              disabled={isSubmitting}
             >
-              {isLoading ? '로그인 중...' : t('auth.login')}
+              {isSubmitting ? '로그인 중...' : t('auth.login')}
             </Button>
           </form>
 

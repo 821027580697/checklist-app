@@ -21,15 +21,18 @@ export default function MainLayout({
   const sidebarCollapsed = useUIStore((state) => state.sidebarCollapsed);
 
   useEffect(() => {
-    if (!isLoading) {
-      if (!isAuthenticated && !needsOnboarding) {
-        router.push('/login');
-      } else if (needsOnboarding) {
-        router.push('/onboarding');
-      }
+    if (isLoading) return; // 로딩 중에는 리다이렉트 하지 않음
+
+    if (needsOnboarding) {
+      // 온보딩이 필요한 경우 온보딩 페이지로
+      router.replace('/onboarding');
+    } else if (!isAuthenticated) {
+      // 인증되지 않은 사용자는 로그인 페이지로
+      router.replace('/login');
     }
   }, [isAuthenticated, isLoading, needsOnboarding, router]);
 
+  // 로딩 중 화면
   if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
@@ -40,8 +43,13 @@ export default function MainLayout({
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
+  // 인증되지 않았거나 온보딩 필요 시 빈 화면 (리다이렉트 대기)
+  if (!isAuthenticated || needsOnboarding) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-primary/20 border-t-primary" />
+      </div>
+    );
   }
 
   return (
