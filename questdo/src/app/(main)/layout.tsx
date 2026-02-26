@@ -54,7 +54,7 @@ export default function MainLayout({
 
   return (
     <GamificationProvider>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-white dark:bg-[#000000]">
         <Header />
         <Sidebar />
 

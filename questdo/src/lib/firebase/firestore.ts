@@ -115,7 +115,7 @@ export const subscribeToCollection = (
   callback: (docs: DocumentData[]) => void,
 ): Unsubscribe => {
   if (!db) {
-    console.warn('Firestore not initialized');
+    // Firestore not initialized
     return () => {};
   }
   const q = query(collection(db, collectionName), ...constraints);

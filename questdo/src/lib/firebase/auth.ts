@@ -1,47 +1,24 @@
-// Firebase 인증 관련 함수
+// Firebase 인증 관련 함수 — Google 전용
 import {
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
   updateProfile,
-  AuthErrorCodes,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './config';
 import { DEFAULT_USER_SETTINGS, DEFAULT_USER_STATS } from '@/types/user';
 
-// Google 로그인 프로바이더
 const googleProvider = new GoogleAuthProvider();
 
-// Firebase 에러 코드 → 사용자 메시지 매핑
+// Firebase 에러 메시지 매핑
 const getAuthErrorMessage = (error: unknown): string => {
   const firebaseError = error as { code?: string; message?: string };
   const code = firebaseError?.code || '';
 
   switch (code) {
-    case AuthErrorCodes.EMAIL_EXISTS:
-    case 'auth/email-already-in-use':
-      return '이미 사용 중인 이메일입니다.';
-    case AuthErrorCodes.INVALID_EMAIL:
-    case 'auth/invalid-email':
-      return '유효하지 않은 이메일 형식입니다.';
-    case AuthErrorCodes.WEAK_PASSWORD:
-    case 'auth/weak-password':
-      return '비밀번호가 너무 약합니다. 6자 이상 입력해주세요.';
-    case AuthErrorCodes.USER_DELETED:
-    case 'auth/user-not-found':
-      return '등록되지 않은 이메일입니다.';
-    case AuthErrorCodes.INVALID_PASSWORD:
-    case 'auth/wrong-password':
-    case 'auth/invalid-credential':
-      return '이메일 또는 비밀번호가 올바르지 않습니다.';
-    case 'auth/operation-not-allowed':
-    case 'auth/admin-restricted-operation':
-      return '이메일/비밀번호 로그인이 활성화되지 않았습니다. Firebase Console에서 Authentication → Sign-in method에서 이메일/비밀번호를 활성화해주세요.';
     case 'auth/too-many-requests':
       return '너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.';
     case 'auth/network-request-failed':
@@ -51,52 +28,19 @@ const getAuthErrorMessage = (error: unknown): string => {
     case 'auth/popup-blocked':
       return '팝업이 차단되었습니다. 팝업 차단을 해제해주세요.';
     case 'auth/internal-error':
-      return 'Firebase 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-    case 'auth/invalid-api-key':
-      return 'Firebase API 키가 올바르지 않습니다. 설정을 확인해주세요.';
-    case 'auth/app-not-authorized':
-      return '이 앱은 Firebase 인증을 사용할 권한이 없습니다. Firebase Console을 확인해주세요.';
-    case 'auth/configuration-not-found':
-      return 'Firebase 인증 설정을 찾을 수 없습니다. Firebase Console에서 Authentication을 활성화해주세요.';
+      return '내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+    case 'auth/cancelled-popup-request':
+      return '';
     default:
-      return `인증 오류: ${code || firebaseError?.message || '알 수 없는 오류'}`;
+      return `로그인 오류가 발생했습니다. (${code || '알 수 없음'})`;
   }
 };
 
-// Firebase 미설정 체크
 const ensureFirebase = () => {
   if (!isFirebaseConfigured || !auth) {
-    return 'Firebase가 설정되지 않았습니다. .env.local 파일을 확인해주세요.';
+    return 'Firebase가 초기화되지 않았습니다.';
   }
   return null;
-};
-
-// 이메일/비밀번호 회원가입
-export const signUpWithEmail = async (email: string, password: string) => {
-  const configError = ensureFirebase();
-  if (configError) return { user: null, error: new Error(configError), message: configError };
-
-  try {
-    const userCredential = await createUserWithEmailAndPassword(auth!, email, password);
-    return { user: userCredential.user, error: null, message: null };
-  } catch (error) {
-    const message = getAuthErrorMessage(error);
-    return { user: null, error: error as Error, message };
-  }
-};
-
-// 이메일/비밀번호 로그인
-export const signInWithEmail = async (email: string, password: string) => {
-  const configError = ensureFirebase();
-  if (configError) return { user: null, error: new Error(configError), message: configError };
-
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth!, email, password);
-    return { user: userCredential.user, error: null, message: null };
-  } catch (error) {
-    const message = getAuthErrorMessage(error);
-    return { user: null, error: error as Error, message };
-  }
 };
 
 // Google 소셜 로그인
@@ -109,6 +53,7 @@ export const signInWithGoogle = async () => {
     return { user: result.user, error: null, message: null };
   } catch (error) {
     const message = getAuthErrorMessage(error);
+    if (!message) return { user: null, error: null, message: null }; // cancelled popup
     return { user: null, error: error as Error, message };
   }
 };
@@ -154,19 +99,16 @@ export const createUserDocument = async (
 
     await setDoc(userRef, userData);
 
-    // Firebase Auth 프로필도 업데이트
     await updateProfile(firebaseUser, {
       displayName: nickname,
       photoURL: avatarUrl,
     });
 
-    // 생성된 문서를 다시 읽어서 서버 타임스탬프가 반영된 데이터 반환
     const createdDoc = await getDoc(userRef);
     const createdData = createdDoc.exists() ? { ...createdDoc.data() } : null;
 
     return { data: createdData, error: null };
   } catch (error) {
-    console.error('createUserDocument error:', error);
     return { data: null, error: error as Error };
   }
 };
@@ -186,7 +128,7 @@ export const getUserDocument = async (uid: string) => {
   }
 };
 
-// 사용자 문서 존재 여부 확인 (온보딩 필요 여부 판단)
+// 사용자 문서 존재 여부 확인
 export const checkUserExists = async (uid: string): Promise<boolean> => {
   try {
     if (!db) return false;
@@ -205,7 +147,7 @@ export const checkNicknameAvailable = async (nickname: string): Promise<boolean>
     const { collection, query, where, getDocs } = await import('firebase/firestore');
     const q = query(collection(db, 'users'), where('nickname', '==', nickname));
     const snapshot = await getDocs(q);
-    return snapshot.empty; // 비어있으면 사용 가능
+    return snapshot.empty;
   } catch {
     return false;
   }
@@ -214,7 +156,6 @@ export const checkNicknameAvailable = async (nickname: string): Promise<boolean>
 // 인증 상태 변경 리스너
 export const onAuthChange = (callback: (user: FirebaseUser | null) => void) => {
   if (!auth) {
-    // Firebase 미초기화 시 로그아웃 상태로 처리
     callback(null);
     return () => {};
   }

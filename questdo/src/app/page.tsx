@@ -50,7 +50,7 @@ export default function LandingPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-background overflow-hidden">
+    <div className="min-h-screen bg-white dark:bg-[#000000] overflow-hidden">
       {/* ─── 히어로 섹션 ─── */}
       <section className="relative flex min-h-screen flex-col items-center justify-center px-6 text-center">
         {/* 배경 그라데이션 — Apple 스타일 */}
@@ -71,17 +71,9 @@ export default function LandingPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                variant="ghost"
-                size="sm"
-                className="text-[13px] font-medium h-8 rounded-lg"
-                onClick={() => router.push('/login')}
-              >
-                로그인
-              </Button>
-              <Button
                 size="sm"
                 className="text-[13px] font-medium h-8 rounded-full px-4"
-                onClick={() => router.push('/signup')}
+                onClick={() => router.push('/login')}
               >
                 시작하기
               </Button>
@@ -124,18 +116,10 @@ export default function LandingPage() {
             <Button
               size="lg"
               className="h-12 w-full rounded-full px-8 text-[15px] font-semibold shadow-lg shadow-primary/20 sm:w-auto"
-              onClick={() => router.push('/signup')}
-            >
-              무료로 시작하기
-              <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              className="h-12 w-full rounded-full px-8 text-[15px] font-medium sm:w-auto"
               onClick={() => router.push('/login')}
             >
-              이미 계정이 있어요
+              Google로 시작하기
+              <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
           </div>
         </motion.div>
@@ -217,9 +201,9 @@ export default function LandingPage() {
           <Button
             size="lg"
             className="h-12 rounded-full px-10 text-[15px] font-semibold shadow-lg shadow-primary/20"
-            onClick={() => router.push('/signup')}
+            onClick={() => router.push('/login')}
           >
-            무료로 시작하기
+            Google로 시작하기
             <ArrowRight className="ml-1.5 h-4 w-4" />
           </Button>
         </motion.div>
