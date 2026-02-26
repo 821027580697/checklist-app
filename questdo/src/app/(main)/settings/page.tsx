@@ -49,6 +49,8 @@ export default function SettingsPage() {
   const [bio, setBio] = useState(user?.bio || '');
   const [isSaving, setIsSaving] = useState(false);
 
+  const setUser = useAuthStore((state) => state.setUser);
+
   // 프로필 저장
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -56,6 +58,8 @@ export default function SettingsPage() {
     try {
       const { error } = await updateDocument('users', user.uid, { nickname, bio });
       if (error) throw error;
+      // Zustand 스토어도 동기화
+      setUser({ ...user, nickname, bio });
       toast.success(lang === 'ko' ? '프로필이 저장되었습니다' : 'Profile saved');
     } catch {
       toast.error(lang === 'ko' ? '저장에 실패했습니다' : 'Failed to save');
@@ -68,7 +72,7 @@ export default function SettingsPage() {
   const handleLogout = async () => {
     await signOut();
     useAuthStore.getState().logout();
-    router.push('/login');
+    router.replace('/login');
   };
 
   return (

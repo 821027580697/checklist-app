@@ -52,8 +52,8 @@ export default function SignupPage() {
 
     setIsSubmitting(true);
     try {
-      const { error, message } = await signUpWithEmail(email, password);
-      if (error) {
+      const { user, error, message } = await signUpWithEmail(email, password);
+      if (error || !user) {
         toast.error(message || '회원가입에 실패했습니다');
         setIsSubmitting(false);
         return;
@@ -61,8 +61,9 @@ export default function SignupPage() {
       // 성공 시 AuthProvider의 onAuthStateChanged가 상태를 업데이트
       // → needsOnboarding=true → useEffect에서 /onboarding으로 리다이렉트
       toast.success('회원가입 성공! 프로필을 설정해주세요');
+      // isSubmitting은 리다이렉트 될 때까지 true를 유지 (버튼 중복 클릭 방지)
     } catch {
-      toast.error('오류가 발생했습니다');
+      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
       setIsSubmitting(false);
     }
   };
@@ -70,15 +71,15 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setIsSubmitting(true);
     try {
-      const { error, message } = await signInWithGoogle();
-      if (error) {
+      const { user, error, message } = await signInWithGoogle();
+      if (error || !user) {
         toast.error(message || 'Google 로그인에 실패했습니다');
         setIsSubmitting(false);
         return;
       }
       // AuthProvider가 상태를 판단하여 자동 리다이렉트
     } catch {
-      toast.error('오류가 발생했습니다');
+      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
       setIsSubmitting(false);
     }
   };

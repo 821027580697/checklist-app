@@ -39,6 +39,9 @@ const getAuthErrorMessage = (error: unknown): string => {
     case 'auth/wrong-password':
     case 'auth/invalid-credential':
       return '이메일 또는 비밀번호가 올바르지 않습니다.';
+    case 'auth/operation-not-allowed':
+    case 'auth/admin-restricted-operation':
+      return '이메일/비밀번호 로그인이 활성화되지 않았습니다. Firebase Console에서 Authentication → Sign-in method에서 이메일/비밀번호를 활성화해주세요.';
     case 'auth/too-many-requests':
       return '너무 많은 시도가 있었습니다. 잠시 후 다시 시도해주세요.';
     case 'auth/network-request-failed':
@@ -47,9 +50,16 @@ const getAuthErrorMessage = (error: unknown): string => {
       return '로그인 팝업이 닫혔습니다. 다시 시도해주세요.';
     case 'auth/popup-blocked':
       return '팝업이 차단되었습니다. 팝업 차단을 해제해주세요.';
+    case 'auth/internal-error':
+      return 'Firebase 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+    case 'auth/invalid-api-key':
+      return 'Firebase API 키가 올바르지 않습니다. 설정을 확인해주세요.';
+    case 'auth/app-not-authorized':
+      return '이 앱은 Firebase 인증을 사용할 권한이 없습니다. Firebase Console을 확인해주세요.';
+    case 'auth/configuration-not-found':
+      return 'Firebase 인증 설정을 찾을 수 없습니다. Firebase Console에서 Authentication을 활성화해주세요.';
     default:
-      console.error('Auth error:', code, firebaseError?.message);
-      return '인증 중 오류가 발생했습니다. 다시 시도해주세요.';
+      return `인증 오류: ${code || firebaseError?.message || '알 수 없는 오류'}`;
   }
 };
 

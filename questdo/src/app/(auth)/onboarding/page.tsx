@@ -92,7 +92,12 @@ export default function OnboardingPage() {
     const currentUser = auth?.currentUser;
     if (!currentUser) {
       toast.error('로그인이 필요합니다');
-      router.push('/login');
+      router.replace('/login');
+      return;
+    }
+
+    if (nickname.length < 2) {
+      toast.error('닉네임을 2자 이상 입력해주세요');
       return;
     }
 
@@ -114,7 +119,7 @@ export default function OnboardingPage() {
       toast.success('QuestDo에 오신 것을 환영합니다! 🎉');
       router.replace('/dashboard');
     } catch {
-      toast.error('오류가 발생했습니다');
+      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
       setIsSubmitting(false);
     }
   };

@@ -1,7 +1,7 @@
 // 인증 프로바이더 — Firebase 인증 상태 감시 및 Zustand 동기화
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { onAuthChange, getUserDocument, checkUserExists } from '@/lib/firebase/auth';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
@@ -13,6 +13,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const setLoading = useAuthStore((state) => state.setLoading);
   const setNeedsOnboarding = useAuthStore((state) => state.setNeedsOnboarding);
 
+  // 동시에 여러 onAuthStateChanged 콜백이 처리되지 않도록 가드
+  const processingRef = useRef(false);
+
   useEffect(() => {
     // Firebase가 설정되지 않은 경우 로딩만 해제
     if (!isFirebaseConfigured) {
@@ -22,34 +25,46 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Firebase 인증 상태 변경 리스너
     const unsubscribe = onAuthChange(async (firebaseUser) => {
-      if (firebaseUser) {
-        setFirebaseUid(firebaseUser.uid);
+      // 이미 처리 중이면 무시 (중복 콜백 방지)
+      if (processingRef.current) return;
+      processingRef.current = true;
 
-        // Firestore에서 사용자 문서 확인
-        const exists = await checkUserExists(firebaseUser.uid);
+      try {
+        if (firebaseUser) {
+          setFirebaseUid(firebaseUser.uid);
 
-        if (exists) {
-          // 사용자 문서가 있으면 로드
-          const { data } = await getUserDocument(firebaseUser.uid);
-          if (data) {
-            setNeedsOnboarding(false);
-            setUser(data as User); // setUser가 isLoading=false, isAuthenticated=true로 설정
-          } else {
-            // 문서가 있다고 했는데 로드 실패 — 재시도 또는 에러
+          // Firestore에서 사용자 문서 확인
+          try {
+            const exists = await checkUserExists(firebaseUser.uid);
+
+            if (exists) {
+              const { data, error } = await getUserDocument(firebaseUser.uid);
+              if (data && !error) {
+                setNeedsOnboarding(false);
+                setUser(data as User);
+              } else {
+                setNeedsOnboarding(true);
+                setUser(null);
+                setLoading(false);
+              }
+            } else {
+              setNeedsOnboarding(true);
+              setUser(null);
+              setLoading(false);
+            }
+          } catch {
             setNeedsOnboarding(true);
+            setUser(null);
             setLoading(false);
           }
         } else {
-          // 사용자 문서가 없으면 온보딩 필요
-          setNeedsOnboarding(true);
+          setUser(null);
+          setFirebaseUid(null);
+          setNeedsOnboarding(false);
           setLoading(false);
         }
-      } else {
-        // 로그아웃 상태
-        setUser(null);
-        setFirebaseUid(null);
-        setNeedsOnboarding(false);
-        setLoading(false);
+      } finally {
+        processingRef.current = false;
       }
     });
 

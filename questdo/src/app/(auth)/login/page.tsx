@@ -43,8 +43,8 @@ export default function LoginPage() {
 
     setIsSubmitting(true);
     try {
-      const { error, message } = await signInWithEmail(email, password);
-      if (error) {
+      const { user, error, message } = await signInWithEmail(email, password);
+      if (error || !user) {
         toast.error(message || '로그인에 실패했습니다');
         setIsSubmitting(false);
         return;
@@ -53,7 +53,7 @@ export default function LoginPage() {
       // → isAuthenticated=true → useEffect에서 /dashboard로 리다이렉트
       toast.success('로그인 성공!');
     } catch {
-      toast.error('오류가 발생했습니다');
+      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
       setIsSubmitting(false);
     }
   };
@@ -61,15 +61,15 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsSubmitting(true);
     try {
-      const { error, message } = await signInWithGoogle();
-      if (error) {
+      const { user, error, message } = await signInWithGoogle();
+      if (error || !user) {
         toast.error(message || 'Google 로그인에 실패했습니다');
         setIsSubmitting(false);
         return;
       }
       // AuthProvider가 상태를 판단하여 자동 리다이렉트
     } catch {
-      toast.error('오류가 발생했습니다');
+      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
       setIsSubmitting(false);
     }
   };

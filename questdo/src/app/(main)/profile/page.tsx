@@ -43,8 +43,8 @@ export default function ProfilePage() {
           <CardContent className="pt-6">
             <div className="flex flex-col items-center text-center">
               {/* 아바타 */}
-              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-purple-500 text-3xl font-bold text-white mb-3">
-                {user.nickname?.charAt(0) || '?'}
+              <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-purple-500 text-4xl mb-3">
+                {user.avatarUrl || user.nickname?.charAt(0) || '?'}
               </div>
 
               {/* 닉네임 & 레벨 */}
