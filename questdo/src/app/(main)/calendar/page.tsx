@@ -51,9 +51,9 @@ export default function CalendarPage() {
 
   const habitEvents = useMemo(() => {
     return habits
-      .filter((h) => h.isActive)
+      .filter((h) => h.isActive && Array.isArray(h.completedDates))
       .flatMap((habit) =>
-        habit.completedDates.map((date) => ({
+        (habit.completedDates || []).map((date) => ({
           id: `habit-${habit.id}-${date}`,
           title: `${habit.icon} ${habit.title}`,
           date,

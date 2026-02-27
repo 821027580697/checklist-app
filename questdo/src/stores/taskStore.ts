@@ -13,6 +13,7 @@ interface TaskState {
   // 상태
   tasks: Task[];
   isLoading: boolean;
+  isFetched: boolean; // 데이터 로드 완료 여부
   filters: TaskFilters;
   viewMode: 'list' | 'kanban';
 
@@ -22,8 +23,10 @@ interface TaskState {
   updateTask: (id: string, data: Partial<Task>) => void;
   removeTask: (id: string) => void;
   setLoading: (loading: boolean) => void;
+  setFetched: (fetched: boolean) => void;
   setFilters: (filters: Partial<TaskFilters>) => void;
   setViewMode: (mode: 'list' | 'kanban') => void;
+  reset: () => void;
 
   // 계산된 값
   getTodayTasks: () => Task[];
@@ -31,9 +34,9 @@ interface TaskState {
 }
 
 export const useTaskStore = create<TaskState>((set, get) => ({
-  // 초기 상태
   tasks: [],
   isLoading: false,
+  isFetched: false,
   filters: {
     category: 'all',
     priority: 'all',
@@ -42,37 +45,33 @@ export const useTaskStore = create<TaskState>((set, get) => ({
   },
   viewMode: 'list',
 
-  // 할 일 목록 전체 설정
-  setTasks: (tasks) => set({ tasks }),
+  setTasks: (tasks) => set({ tasks, isFetched: true }),
 
-  // 할 일 추가
   addTask: (task) => set((state) => ({ tasks: [task, ...state.tasks] })),
 
-  // 할 일 업데이트
   updateTask: (id, data) =>
     set((state) => ({
       tasks: state.tasks.map((t) => (t.id === id ? { ...t, ...data } : t)),
     })),
 
-  // 할 일 삭제
   removeTask: (id) =>
     set((state) => ({
       tasks: state.tasks.filter((t) => t.id !== id),
     })),
 
-  // 로딩 상태
   setLoading: (loading) => set({ isLoading: loading }),
+  setFetched: (fetched) => set({ isFetched: fetched }),
 
-  // 필터 설정
   setFilters: (filters) =>
     set((state) => ({
       filters: { ...state.filters, ...filters },
     })),
 
-  // 뷰 모드 설정
   setViewMode: (mode) => set({ viewMode: mode }),
 
-  // 오늘의 할 일 (미완료)
+  reset: () => set({ tasks: [], isLoading: false, isFetched: false }),
+
+  // 오늘의 할 일
   getTodayTasks: () => {
     const { tasks } = get();
     const today = new Date();
@@ -83,8 +82,12 @@ export const useTaskStore = create<TaskState>((set, get) => ({
     return tasks.filter((t) => {
       if (t.status === 'completed') return false;
       if (!t.dueDate) return false;
-      const dueDate = t.dueDate.toDate();
-      return dueDate >= today && dueDate < tomorrow;
+      try {
+        const dueDate = t.dueDate.toDate();
+        return dueDate >= today && dueDate < tomorrow;
+      } catch {
+        return false;
+      }
     });
   },
 

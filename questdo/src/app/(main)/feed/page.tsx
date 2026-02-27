@@ -82,10 +82,11 @@ export default function FeedPage() {
       setPosts(loadedPosts);
     } catch (err) {
       console.error('Failed to load posts:', err);
+      toast.error(lang === 'ko' ? '게시글을 불러오지 못했습니다' : 'Failed to load posts');
     } finally {
       setIsLoadingPosts(false);
     }
-  }, []);
+  }, [lang]);
 
   useEffect(() => {
     loadPosts();
@@ -102,7 +103,7 @@ export default function FeedPage() {
         userAvatar: user.avatarUrl || user.nickname?.charAt(0) || '?',
         userLevel: user.level,
         userTitle: user.title,
-        type: 'completion' as const,
+        type: 'general' as const,
         content: {
           text: postContent.trim(),
           imageUrl: null,
@@ -165,6 +166,7 @@ export default function FeedPage() {
       );
     } catch (err) {
       console.error('Failed to react:', err);
+      toast.error(lang === 'ko' ? '반응 처리에 실패했습니다' : 'Failed to update reaction');
     }
   };
 
@@ -187,6 +189,7 @@ export default function FeedPage() {
       setComments(loadedComments);
     } catch (err) {
       console.error('Failed to load comments:', err);
+      toast.error(lang === 'ko' ? '댓글을 불러오지 못했습니다' : 'Failed to load comments');
     } finally {
       setIsLoadingComments(false);
     }
@@ -220,8 +223,10 @@ export default function FeedPage() {
 
       setCommentText('');
       loadComments(postId);
+      toast.success(lang === 'ko' ? '댓글이 작성되었습니다' : 'Comment added');
     } catch (err) {
       console.error('Failed to add comment:', err);
+      toast.error(lang === 'ko' ? '댓글 작성에 실패했습니다' : 'Failed to add comment');
     }
   };
 
@@ -330,7 +335,7 @@ export default function FeedPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.04, duration: 0.4 }}
               >
-                <div className="rounded-2xl border border-border/50 bg-white dark:bg-[#1C1C1E] overflow-hidden p-5 transition-shadow hover:shadow-sm">
+                <div className="rounded-2xl border border-border/50 bg-card overflow-hidden p-5 transition-shadow hover:shadow-sm">
                   {/* 포스트 헤더 */}
                   <div className="flex items-center gap-3 mb-3">
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-lg shrink-0">

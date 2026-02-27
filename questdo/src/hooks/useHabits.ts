@@ -1,4 +1,4 @@
-// 습관 CRUD 훅
+// 습관 CRUD 훅 — Firestore 쿼리 안정화
 'use client';
 
 import { useEffect, useCallback } from 'react';
@@ -11,34 +11,59 @@ import {
   deleteDocument,
   getDocuments,
   where,
-  orderBy,
 } from '@/lib/firebase/firestore';
+import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { Timestamp } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 export const useHabits = () => {
-  const { habits, setHabits, addHabit, updateHabit, removeHabit, setLoading, isLoading } = useHabitStore();
-  const user = useAuthStore((state) => state.user);
+  const habits = useHabitStore((s) => s.habits);
+  const isLoading = useHabitStore((s) => s.isLoading);
+  const isFetched = useHabitStore((s) => s.isFetched);
+  const setHabits = useHabitStore((s) => s.setHabits);
+  const addHabit = useHabitStore((s) => s.addHabit);
+  const updateHabit = useHabitStore((s) => s.updateHabit);
+  const removeHabit = useHabitStore((s) => s.removeHabit);
+  const setLoading = useHabitStore((s) => s.setLoading);
+  const user = useAuthStore((s) => s.user);
 
-  // 습관 목록 불러오기
-  const fetchHabits = useCallback(async () => {
-    if (!user) return;
+  // 습관 목록 불러오기 (중복 방지)
+  const fetchHabits = useCallback(async (force = false) => {
+    if (!user || !isFirebaseConfigured) return;
+    if (isLoading) return;
+    if (isFetched && !force) return;
+
     setLoading(true);
     try {
       const { data, error } = await getDocuments('habits', [
         where('userId', '==', user.uid),
-        orderBy('createdAt', 'desc'),
       ]);
-      if (error) throw error;
-      setHabits(data as Habit[]);
+
+      if (error) {
+        const errMsg = (error as Error)?.message || '';
+        if (errMsg.includes('permission') || errMsg.includes('PERMISSION_DENIED')) {
+          setHabits([]);
+          return;
+        }
+        throw error;
+      }
+
+      const sorted = (data as Habit[]).sort((a, b) => {
+        const aTime = a.createdAt?.toMillis?.() || 0;
+        const bTime = b.createdAt?.toMillis?.() || 0;
+        return bTime - aTime;
+      });
+      setHabits(sorted);
     } catch (error) {
       console.error('습관 목록 불러오기 실패:', error);
-      toast.error('습관 목록을 불러오지 못했습니다');
+      if (!isFetched) {
+        setHabits([]);
+      }
     } finally {
       setLoading(false);
     }
-  }, [user, setHabits, setLoading]);
+  }, [user, isLoading, isFetched, setHabits, setLoading]);
 
   // 습관 생성
   const createHabit = useCallback(
@@ -77,23 +102,22 @@ export const useHabits = () => {
     [user, addHabit],
   );
 
-  // 오늘 습관 체크/언체크
+  // 오늘 습관 체크/언체크 (낙관적 업데이트)
   const toggleTodayCheck = useCallback(
     async (habit: Habit) => {
       const todayStr = format(new Date(), 'yyyy-MM-dd');
-      const alreadyChecked = habit.completedDates.includes(todayStr);
+      const currentDates = habit.completedDates || [];
+      const alreadyChecked = currentDates.includes(todayStr);
 
       let newDates: string[];
       let newTotalChecks: number;
 
       if (alreadyChecked) {
-        // 체크 해제
-        newDates = habit.completedDates.filter((d) => d !== todayStr);
-        newTotalChecks = habit.totalChecks - 1;
+        newDates = currentDates.filter((d) => d !== todayStr);
+        newTotalChecks = Math.max(0, (habit.totalChecks || 0) - 1);
       } else {
-        // 체크
-        newDates = [...habit.completedDates, todayStr];
-        newTotalChecks = habit.totalChecks + 1;
+        newDates = [...currentDates, todayStr];
+        newTotalChecks = (habit.totalChecks || 0) + 1;
       }
 
       const data: Partial<Habit> = {
@@ -101,10 +125,19 @@ export const useHabits = () => {
         totalChecks: newTotalChecks,
       };
 
+      // 낙관적 업데이트
+      updateHabit(habit.id, data);
+
       try {
         const { error } = await updateDocument('habits', habit.id, data);
-        if (error) throw error;
-        updateHabit(habit.id, data);
+        if (error) {
+          // 실패 시 되돌리기
+          updateHabit(habit.id, {
+            completedDates: currentDates,
+            totalChecks: habit.totalChecks,
+          });
+          throw error;
+        }
 
         if (!alreadyChecked) {
           toast.success('습관 체크 완료! +5 XP');
@@ -117,26 +150,38 @@ export const useHabits = () => {
     [updateHabit],
   );
 
-  // 습관 삭제
+  // 습관 삭제 (낙관적 삭제)
   const deleteHabit = useCallback(
     async (habitId: string) => {
+      const previousHabit = habits.find((h) => h.id === habitId);
       try {
-        const { error } = await deleteDocument('habits', habitId);
-        if (error) throw error;
         removeHabit(habitId);
+        const { error } = await deleteDocument('habits', habitId);
+        if (error) {
+          if (previousHabit) {
+            addHabit(previousHabit);
+          }
+          throw error;
+        }
         toast.success('습관이 삭제되었습니다');
       } catch (error) {
         console.error('습관 삭제 실패:', error);
         toast.error('습관 삭제에 실패했습니다');
       }
     },
-    [removeHabit],
+    [habits, removeHabit, addHabit],
   );
 
   // 초기 로드
   useEffect(() => {
-    fetchHabits();
-  }, [fetchHabits]);
+    if (user) {
+      if (!isFetched) {
+        fetchHabits();
+      }
+    } else {
+      useHabitStore.getState().reset();
+    }
+  }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     habits,
@@ -144,6 +189,6 @@ export const useHabits = () => {
     createHabit,
     toggleTodayCheck,
     deleteHabit,
-    fetchHabits,
+    fetchHabits: () => fetchHabits(true),
   };
 };

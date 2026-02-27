@@ -23,7 +23,7 @@ export const HabitCard = ({
 }: HabitCardProps) => {
   const { t } = useTranslation();
   const todayStr = format(new Date(), 'yyyy-MM-dd');
-  const isCheckedToday = habit.completedDates.includes(todayStr);
+  const isCheckedToday = (habit.completedDates || []).includes(todayStr);
 
   return (
     <motion.div
