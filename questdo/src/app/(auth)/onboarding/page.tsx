@@ -91,8 +91,10 @@ export default function OnboardingPage() {
       setNeedsOnboarding(false);
       toast.success('QuestDo에 오신 것을 환영합니다! 🎉');
       router.replace('/dashboard');
-    } catch {
-      toast.error('오류가 발생했습니다. 다시 시도해주세요.');
+    } catch (err) {
+      console.error('온보딩 완료 에러:', err);
+      const message = err instanceof Error ? err.message : '알 수 없는 오류';
+      toast.error(`프로필 설정 실패: ${message}`);
       setIsSubmitting(false);
     }
   };

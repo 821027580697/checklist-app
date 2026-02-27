@@ -31,54 +31,65 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  const user = await getServerUser();
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  try {
+    const user = await getServerUser();
+    console.log('[PUT /api/users] 세션 유저:', user ? { uid: user.uid, email: user.email } : 'null');
+    if (!user || !user.uid) return NextResponse.json({ error: '로그인이 필요합니다 (세션 없음)' }, { status: 401 });
 
-  await dbConnect();
-  const body = await req.json();
+    await dbConnect();
+    const body = await req.json();
+    console.log('[PUT /api/users] 요청 바디:', JSON.stringify(body));
 
-  // stats.xxx 형태의 dot notation 처리
-  const updateData: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(body)) {
-    updateData[key] = value;
-  }
+    // $set에 넣을 데이터와 $setOnInsert에 넣을 기본값 분리
+    const updateData: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(body)) {
+      updateData[key] = value;
+    }
 
-  // upsert: 사용자가 아직 DB에 없으면 자동 생성 (온보딩 시)
-  const updated = await UserModel.findByIdAndUpdate(
-    user.uid,
-    {
-      $set: updateData,
-      $setOnInsert: {
-        _id: user.uid,
-        email: user.email || '',
-        nickname: updateData.nickname || user.name || 'User',
-        avatarUrl: updateData.avatarUrl || user.image || '',
-        bio: '',
-        level: 1,
-        xp: 0,
-        totalXp: 0,
-        title: '초보 모험가',
-        stats: {
-          totalCompleted: 0,
-          currentStreak: 0,
-          longestStreak: 0,
-          totalHabitChecks: 0,
-          lastStreakDate: '',
-        },
-        badges: [],
-        settings: {
-          theme: 'system',
-          language: 'ko',
-          notifications: { taskReminder: true, habitReminder: true, socialActivity: true, achievements: true },
-          privacy: { profilePublic: true, showStreak: true, showLevel: true },
-        },
-        followersCount: 0,
-        followingCount: 0,
+    // $setOnInsert에는 $set에 없는 필드만 넣어야 충돌 방지
+    const insertDefaults: Record<string, unknown> = {
+      _id: user.uid,
+      email: user.email || '',
+      bio: '',
+      level: 1,
+      xp: 0,
+      totalXp: 0,
+      title: '초보 모험가',
+      stats: {
+        totalCompleted: 0,
+        currentStreak: 0,
+        longestStreak: 0,
+        totalHabitChecks: 0,
+        lastStreakDate: '',
       },
-    },
-    { new: true, upsert: true },
-  ).lean();
+      badges: [],
+      settings: {
+        theme: 'system',
+        language: 'ko',
+        notifications: { taskReminder: true, habitReminder: true, socialActivity: true, achievements: true },
+        privacy: { profilePublic: true, showStreak: true, showLevel: true },
+      },
+      followersCount: 0,
+      followingCount: 0,
+    };
 
-  if (!updated) return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
-  return NextResponse.json({ ...updated, uid: updated._id.toString() });
+    // $set에 이미 있는 필드는 $setOnInsert에서 제거
+    for (const key of Object.keys(updateData)) {
+      delete insertDefaults[key];
+    }
+
+    const updated = await UserModel.findByIdAndUpdate(
+      user.uid,
+      { $set: updateData, $setOnInsert: insertDefaults },
+      { new: true, upsert: true, returnDocument: 'after' },
+    ).lean();
+
+    console.log('[PUT /api/users] 결과:', updated ? 'OK' : 'null');
+    if (!updated) return NextResponse.json({ error: '사용자 업데이트 실패' }, { status: 500 });
+    return NextResponse.json({ ...updated, uid: updated._id.toString() });
+  } catch (err) {
+    console.error('[PUT /api/users] 에러:', err);
+    const message = err instanceof Error ? err.message : '알 수 없는 서버 오류';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }
