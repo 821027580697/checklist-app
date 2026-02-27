@@ -73,6 +73,7 @@ export interface FinanceData {
   exchangeRate?: number;                  // 적용 환율
   paymentMethod?: string;                 // 결제 수단
   merchant?: string;                      // 가맹점/상호
+  receiptImageUrl?: string;              // 영수증 이미지 URL
 }
 
 // 통화 라벨 (다국어)

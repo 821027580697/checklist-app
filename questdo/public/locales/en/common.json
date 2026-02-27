@@ -239,7 +239,15 @@
     "mobilePay": "Mobile Pay",
     "other": "Other",
     "monthlySummary": "Monthly Summary",
-    "convertedAmount": "Converted Amount"
+    "convertedAmount": "Converted Amount",
+    "receiptScan": "Scan Receipt",
+    "receiptScanDesc": "AI will automatically detect amount, merchant, and date",
+    "takePhoto": "Take Photo",
+    "choosePhoto": "Choose Photo",
+    "recognized": "Recognized",
+    "applyResult": "Apply",
+    "retake": "Retake",
+    "attachedReceipt": "Attached Receipt"
   },
   "gamification": {
     "levelUp": "🎉 Level {level} reached!",

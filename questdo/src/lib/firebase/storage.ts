@@ -49,6 +49,27 @@ export const uploadPostImage = async (
   }
 };
 
+// 영수증 이미지 업로드
+export const uploadReceiptImage = async (
+  userId: string,
+  file: File,
+): Promise<{ url: string | null; error: Error | null }> => {
+  try {
+    if (!storage) throw new Error('Firebase Storage not initialized');
+    // 파일 크기 제한 (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      throw new Error('파일 크기는 10MB 이하여야 합니다.');
+    }
+
+    const storageRef = ref(storage, `receipts/${userId}/${Date.now()}_${file.name}`);
+    await uploadBytes(storageRef, file);
+    const url = await getDownloadURL(storageRef);
+    return { url, error: null };
+  } catch (error) {
+    return { url: null, error: error as Error };
+  }
+};
+
 // 파일 삭제
 export const deleteFile = async (fileUrl: string) => {
   try {

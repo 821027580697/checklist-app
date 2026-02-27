@@ -239,7 +239,15 @@
     "mobilePay": "모바일 결제",
     "other": "기타",
     "monthlySummary": "월별 요약",
-    "convertedAmount": "환산 금액"
+    "convertedAmount": "환산 금액",
+    "receiptScan": "영수증 스캔",
+    "receiptScanDesc": "AI가 자동으로 금액, 가맹점, 날짜를 인식합니다",
+    "takePhoto": "카메라 촬영",
+    "choosePhoto": "사진 선택",
+    "recognized": "인식 완료",
+    "applyResult": "적용하기",
+    "retake": "다시 촬영",
+    "attachedReceipt": "첨부된 영수증"
   },
   "gamification": {
     "levelUp": "🎉 레벨 {level} 달성!",

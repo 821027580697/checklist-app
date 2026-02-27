@@ -38,6 +38,8 @@ import { CATEGORY_ICONS } from '@/constants/categories';
 import { formatCurrency } from '@/hooks/useExchangeRate';
 import { Calculator } from '@/components/finance/Calculator';
 import { ExchangeRateConverter } from '@/components/finance/ExchangeRateConverter';
+import { ReceiptScanner } from '@/components/finance/ReceiptScanner';
+import { ReceiptData } from '@/hooks/useReceiptOCR';
 import {
   Plus,
   X,
@@ -49,6 +51,7 @@ import {
   Wallet,
   Store,
   CreditCard,
+  Receipt,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -97,6 +100,7 @@ export const TaskForm = ({
   const [newSubtask, setNewSubtask] = useState('');
   const [showCalculator, setShowCalculator] = useState(false);
   const [showExchangeRate, setShowExchangeRate] = useState(false);
+  const [showReceiptScanner, setShowReceiptScanner] = useState(false);
 
   // initialData 변경 시 폼 리셋
   useEffect(() => {
@@ -114,6 +118,7 @@ export const TaskForm = ({
       });
       setShowCalculator(false);
       setShowExchangeRate(false);
+      setShowReceiptScanner(false);
     }
   }, [open, initialData]);
 
@@ -136,6 +141,7 @@ export const TaskForm = ({
       }));
       setShowCalculator(false);
       setShowExchangeRate(false);
+      setShowReceiptScanner(false);
     }
   }, [formData.category]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -289,12 +295,61 @@ export const TaskForm = ({
                 className="space-y-4 overflow-hidden"
               >
                 {/* 재정 섹션 헤더 */}
-                <div className="flex items-center gap-2 pt-2">
-                  <Wallet className="h-4 w-4 text-[#AF52DE]" />
-                  <span className="text-[13px] font-semibold text-[#AF52DE]">
-                    {lang === 'ko' ? '가계부 정보' : 'Finance Details'}
-                  </span>
+                <div className="flex items-center justify-between pt-2">
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-[#AF52DE]" />
+                    <span className="text-[13px] font-semibold text-[#AF52DE]">
+                      {lang === 'ko' ? '가계부 정보' : 'Finance Details'}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-lg text-[11px] px-2.5 border-[#AF52DE]/30 text-[#AF52DE] hover:bg-[#AF52DE]/5"
+                    onClick={() => setShowReceiptScanner(!showReceiptScanner)}
+                  >
+                    <Receipt className="h-3 w-3 mr-1" />
+                    {lang === 'ko' ? '영수증 스캔' : 'Scan Receipt'}
+                  </Button>
                 </div>
+
+                {/* 영수증 스캐너 */}
+                <AnimatePresence>
+                  {showReceiptScanner && (
+                    <ReceiptScanner
+                      onResult={(data) => {
+                        // OCR 결과를 폼에 반영
+                        if (data.title && !formData.title) {
+                          setFormData((prev) => ({ ...prev, title: data.title }));
+                        }
+                        if (data.merchant) {
+                          updateFinanceData({ merchant: data.merchant });
+                        }
+                        if (data.amount > 0) {
+                          updateFinanceData({ amount: data.amount });
+                        }
+                        if (data.currency) {
+                          updateFinanceData({ currency: data.currency });
+                        }
+                        if (data.transactionType) {
+                          updateFinanceData({ transactionType: data.transactionType });
+                        }
+                        if (data.paymentMethod) {
+                          updateFinanceData({ paymentMethod: data.paymentMethod });
+                        }
+                        if (data.receiptImageUrl) {
+                          updateFinanceData({ receiptImageUrl: data.receiptImageUrl });
+                        }
+                        if (data.date) {
+                          setFormData((prev) => ({ ...prev, dueDate: data.date }));
+                        }
+                        setShowReceiptScanner(false);
+                      }}
+                      onClose={() => setShowReceiptScanner(false)}
+                    />
+                  )}
+                </AnimatePresence>
 
                 {/* 거래 유형 선택 — 세그먼트 컨트롤 */}
                 <div className="space-y-2">
@@ -434,6 +489,33 @@ export const TaskForm = ({
                     />
                   </div>
                 </div>
+
+                {/* 영수증 이미지 미리보기 */}
+                {formData.financeData.receiptImageUrl && (
+                  <div className="space-y-1.5">
+                    <Label className="text-[12px] flex items-center gap-1.5">
+                      <Receipt className="h-3 w-3 text-muted-foreground" />
+                      {lang === 'ko' ? '첨부된 영수증' : 'Attached Receipt'}
+                    </Label>
+                    <div className="relative rounded-xl overflow-hidden bg-secondary/30 border border-border/30">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={formData.financeData.receiptImageUrl}
+                        alt="Receipt"
+                        className="w-full h-auto max-h-32 object-contain"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute top-1.5 right-1.5 h-6 w-6 rounded-full bg-black/40 text-white hover:bg-black/60"
+                        onClick={() => updateFinanceData({ receiptImageUrl: undefined })}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 {/* 환율 변환 토글 버튼 */}
                 <Button
