@@ -63,7 +63,7 @@ export const FinanceSummary = ({ className }: FinanceSummaryProps) => {
     return financeTasks.filter((t) => {
       if (!t.createdAt) return false;
       try {
-        const date = t.createdAt.toDate();
+        const date = new Date(t.createdAt);
         return isWithinInterval(date, { start, end });
       } catch {
         return true; // fallback: include
@@ -109,8 +109,8 @@ export const FinanceSummary = ({ className }: FinanceSummaryProps) => {
   const recentTransactions = useMemo(() => {
     return monthlyFinanceTasks
       .sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
+        const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+        const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return bTime - aTime;
       })
       .slice(0, 10);
@@ -331,7 +331,7 @@ export const FinanceSummary = ({ className }: FinanceSummaryProps) => {
                           <p className="text-[10px] text-muted-foreground">
                             {fd.merchant && `${fd.merchant} · `}
                             {paymentMethodLabel(fd.paymentMethod)}
-                            {t.createdAt && ` · ${format(t.createdAt.toDate(), 'M/d')}`}
+                            {t.createdAt && ` · ${format(new Date(t.createdAt), 'M/d')}`}
                           </p>
                         </div>
                         <p

@@ -19,7 +19,6 @@ import { useHabitStore } from '@/stores/habitStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Task, TaskCategory, TaskPriority, FinanceData } from '@/types/task';
 import { HabitFrequencyType, Habit } from '@/types/habit';
-import { Timestamp } from 'firebase/firestore';
 import { Plus, CheckSquare, Repeat, Info, Hand, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -103,7 +102,7 @@ export default function TasksHabitsPage() {
       category: data.category,
       priority: data.priority,
       status: 'todo',
-      dueDate: data.dueDate ? Timestamp.fromDate(new Date(data.dueDate)) : null,
+      dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : null,
       dueTime: data.dueTime || null,
       reminder: { enabled: false, type: 'at_time' },
       isRecurring: data.isRecurring,
@@ -130,7 +129,7 @@ export default function TasksHabitsPage() {
       description: data.description,
       category: data.category,
       priority: data.priority,
-      dueDate: data.dueDate ? Timestamp.fromDate(new Date(data.dueDate)) : null,
+      dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : null,
       dueTime: data.dueTime || null,
       isRecurring: data.isRecurring,
       subtasks: data.subtasks,
@@ -459,7 +458,7 @@ export default function TasksHabitsPage() {
             category: editingTask.category,
             priority: editingTask.priority,
             dueDate: editingTask.dueDate
-              ? editingTask.dueDate.toDate().toISOString().split('T')[0]
+              ? new Date(editingTask.dueDate).toISOString().split('T')[0]
               : '',
             dueTime: editingTask.dueTime || '',
             isRecurring: editingTask.isRecurring,

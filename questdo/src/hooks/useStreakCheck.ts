@@ -1,16 +1,13 @@
-// 스트릭 체크 훅 — 날짜 기반 1일 1회 카운트 + 미완료 시 리셋
-// ✅ 고도화: 실시간 반영, 오늘 기준 1일 시작, localStorage 백업
+// 스트릭 체크 훅 — 날짜 기반 1일 1회 카운트 + 미완료 시 리셋 (MongoDB 기반)
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTaskStore } from '@/stores/taskStore';
 import { useHabitStore } from '@/stores/habitStore';
 import { useAuthStore } from '@/stores/authStore';
-import { updateDocument, getDocument } from '@/lib/firebase/firestore';
-import { isFirebaseConfigured } from '@/lib/firebase/config';
+import { userApi } from '@/lib/api/client';
 import { isSameDay, format, subDays } from 'date-fns';
 
-// 응원 메시지
 const CHEER_MESSAGES_KO = [
   '대단해요! 오늘도 완벽한 하루! 🎉',
   '꾸준함이 곧 실력! 잘하고 있어요 💪',
@@ -46,38 +43,22 @@ export interface StreakCheckResult {
   currentStreak: number;
 }
 
-// localStorage 키
 const STREAK_DATE_KEY = 'questdo_last_streak_date';
 const STREAK_COUNT_KEY = 'questdo_current_streak';
 
-// 로컬 스토리지에서 마지막 스트릭 날짜 읽기
 function getLocalStreakDate(): string {
   if (typeof window === 'undefined') return '';
-  try {
-    return localStorage.getItem(STREAK_DATE_KEY) || '';
-  } catch {
-    return '';
-  }
+  try { return localStorage.getItem(STREAK_DATE_KEY) || ''; } catch { return ''; }
 }
 
-// 로컬 스토리지에 스트릭 날짜 저장
 function setLocalStreakDate(date: string) {
   if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STREAK_DATE_KEY, date);
-  } catch {
-    // 무시
-  }
+  try { localStorage.setItem(STREAK_DATE_KEY, date); } catch { /* ignore */ }
 }
 
-// 로컬 스토리지에 스트릭 카운트 저장
 function setLocalStreakCount(count: number) {
   if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(STREAK_COUNT_KEY, String(count));
-  } catch {
-    // 무시
-  }
+  try { localStorage.setItem(STREAK_COUNT_KEY, String(count)); } catch { /* ignore */ }
 }
 
 export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
@@ -90,13 +71,12 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [cheerMessage, setCheerMessage] = useState('');
-  const isBusyRef = useRef(false); // 비동기 처리 중인지
-  const alreadyIncrementedTodayRef = useRef(false); // 오늘 이미 증가했는지
+  const isBusyRef = useRef(false);
+  const alreadyIncrementedTodayRef = useRef(false);
 
   const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const today = useMemo(() => new Date(), []);
 
-  // 오늘 이미 처리했는지 초기 확인
   useEffect(() => {
     const localLastDate = getLocalStreakDate();
     const serverLastDate = user?.stats?.lastStreakDate || '';
@@ -105,205 +85,121 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     }
   }, [user?.stats?.lastStreakDate, todayStr]);
 
-  // 오늘 할 일 완료 여부 (실시간 반영)
   const todayTasksStatus = useMemo(() => {
     if (!isFetchedTasks) return { total: 0, completed: 0, allDone: false };
-
     const todayTasks = tasks.filter((task) => {
       if (!task.dueDate) return false;
-      try {
-        return isSameDay(task.dueDate.toDate(), today);
-      } catch {
-        return false;
-      }
+      try { return isSameDay(new Date(task.dueDate), today); } catch { return false; }
     });
-
     const completed = todayTasks.filter((t) => t.status === 'completed').length;
-    return {
-      total: todayTasks.length,
-      completed,
-      allDone: todayTasks.length > 0 && completed === todayTasks.length,
-    };
+    return { total: todayTasks.length, completed, allDone: todayTasks.length > 0 && completed === todayTasks.length };
   }, [tasks, isFetchedTasks, today]);
 
-  // 오늘 습관 완료 여부 (실시간 반영)
   const todayHabitsStatus = useMemo(() => {
     if (!isFetchedHabits) return { total: 0, checked: 0, allDone: false };
-
     const todayDayOfWeek = today.getDay();
     const todayHabits = habits.filter((h) => {
       if (!h.isActive) return false;
       if (h.frequency.type === 'daily') return true;
-      if (h.frequency.type === 'custom') {
-        return h.frequency.daysOfWeek?.includes(todayDayOfWeek) || false;
-      }
+      if (h.frequency.type === 'custom') return h.frequency.daysOfWeek?.includes(todayDayOfWeek) || false;
       return true;
     });
-
-    const checked = todayHabits.filter((h) =>
-      (h.completedDates || []).includes(todayStr),
-    ).length;
-
-    return {
-      total: todayHabits.length,
-      checked,
-      allDone: todayHabits.length > 0 && checked === todayHabits.length,
-    };
+    const checked = todayHabits.filter((h) => (h.completedDates || []).includes(todayStr)).length;
+    return { total: todayHabits.length, checked, allDone: todayHabits.length > 0 && checked === todayHabits.length };
   }, [habits, isFetchedHabits, today, todayStr]);
 
-  // 할 일 OR 습관 중 하나라도 있고, 있는 것 모두 100% 완료
   const bothComplete = useMemo(() => {
     const hasTasks = todayTasksStatus.total > 0;
     const hasHabits = todayHabitsStatus.total > 0;
-
     if (!hasTasks && !hasHabits) return false;
-
     const tasksOk = !hasTasks || todayTasksStatus.allDone;
     const habitsOk = !hasHabits || todayHabitsStatus.allDone;
-
     return tasksOk && habitsOk;
   }, [todayTasksStatus, todayHabitsStatus]);
 
-  const currentStreak = user?.stats?.currentStreak || 0;
-
-  // 스트릭 업데이트 함수 — bothComplete가 true가 되면 실행
   const processStreak = useCallback(async () => {
-    if (!user || !isFirebaseConfigured) return;
+    if (!user) return;
     if (!isFetchedTasks || !isFetchedHabits) return;
-    if (isBusyRef.current) return;
-    if (alreadyIncrementedTodayRef.current) return;
-
-    // bothComplete가 아닌 경우는 스트릭 증가 안함 (체크만 실시간 반영)
-    if (!bothComplete) return;
+    if (isBusyRef.current || alreadyIncrementedTodayRef.current || !bothComplete) return;
 
     isBusyRef.current = true;
-
     try {
-      // Firestore에서 최신 사용자 데이터 읽기
       let serverLastStreakDate = user.stats?.lastStreakDate || '';
       let serverCurrentStreak = user.stats?.currentStreak || 0;
       let serverLongestStreak = user.stats?.longestStreak || 0;
 
       try {
-        const { data: freshUser } = await getDocument('users', user.uid);
-        if (freshUser) {
-          const freshStats = (freshUser as Record<string, unknown>).stats as Record<string, unknown> | undefined;
-          if (freshStats) {
-            serverLastStreakDate = (freshStats.lastStreakDate as string) || '';
-            serverCurrentStreak = (freshStats.currentStreak as number) || 0;
-            serverLongestStreak = (freshStats.longestStreak as number) || 0;
-          }
+        const freshUser = await userApi.me();
+        const freshStats = (freshUser as Record<string, unknown>).stats as Record<string, unknown> | undefined;
+        if (freshStats) {
+          serverLastStreakDate = (freshStats.lastStreakDate as string) || '';
+          serverCurrentStreak = (freshStats.currentStreak as number) || 0;
+          serverLongestStreak = (freshStats.longestStreak as number) || 0;
         }
-      } catch {
-        // Firestore 읽기 실패 시 로컬 데이터 사용
-      }
+      } catch { /* use local data */ }
 
-      // localStorage도 확인 (이중 안전장치)
       const localLastDate = getLocalStreakDate();
-
-      // 오늘 이미 처리했으면 스킵
       if (serverLastStreakDate === todayStr || localLastDate === todayStr) {
         alreadyIncrementedTodayRef.current = true;
         return;
       }
 
       alreadyIncrementedTodayRef.current = true;
-
       const yesterdayStr = format(subDays(today, 1), 'yyyy-MM-dd');
-
-      // 어제가 마지막이면 연속, 아니면 오늘부터 1일 시작
       const isConsecutive = serverLastStreakDate === yesterdayStr;
       const newStreak = isConsecutive ? serverCurrentStreak + 1 : 1;
       const newLongest = Math.max(newStreak, serverLongestStreak);
 
-      // 응원 메시지
       const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
-      const msg = messages[Math.floor(Math.random() * messages.length)];
-      setCheerMessage(msg);
+      setCheerMessage(messages[Math.floor(Math.random() * messages.length)]);
       setShowCelebration(true);
 
-      // Firestore 업데이트
-      await updateDocument('users', user.uid, {
+      await userApi.update({
         'stats.currentStreak': newStreak,
         'stats.longestStreak': newLongest,
         'stats.lastStreakDate': todayStr,
       });
 
-      // localStorage에도 저장
       setLocalStreakDate(todayStr);
       setLocalStreakCount(newStreak);
 
-      // 로컬 상태 업데이트
       setUser({
         ...user,
-        stats: {
-          ...user.stats,
-          currentStreak: newStreak,
-          longestStreak: newLongest,
-          lastStreakDate: todayStr,
-        },
+        stats: { ...user.stats, currentStreak: newStreak, longestStreak: newLongest, lastStreakDate: todayStr },
       });
 
-      // 축하 애니메이션 타이머
-      setTimeout(() => {
-        setShowCelebration(false);
-      }, 4000);
+      setTimeout(() => setShowCelebration(false), 4000);
     } finally {
       isBusyRef.current = false;
     }
   }, [user, isFetchedTasks, isFetchedHabits, bothComplete, todayStr, today, lang, setUser]);
 
-  // 실시간 반영: bothComplete가 변경될 때마다 스트릭 체크
   useEffect(() => {
-    if (!user || !isFirebaseConfigured) return;
-    if (!isFetchedTasks || !isFetchedHabits) return;
-    if (alreadyIncrementedTodayRef.current) return;
-    if (!bothComplete) return;
-
-    // bothComplete가 true가 되면 약간의 딜레이 후 실행
-    const timer = setTimeout(() => {
-      processStreak();
-    }, 300);
-
+    if (!user || !isFetchedTasks || !isFetchedHabits) return;
+    if (alreadyIncrementedTodayRef.current || !bothComplete) return;
+    const timer = setTimeout(() => processStreak(), 300);
     return () => clearTimeout(timer);
   }, [processStreak, user, isFetchedTasks, isFetchedHabits, bothComplete]);
 
-  // 페이지 마운트 시 이전 날짜의 스트릭 리셋 확인
+  // 오래된 스트릭 리셋
   useEffect(() => {
-    if (!user || !isFirebaseConfigured) return;
-    if (!isFetchedTasks || !isFetchedHabits) return;
-
+    if (!user || !isFetchedTasks || !isFetchedHabits) return;
     const checkStaleStreak = async () => {
       if (isBusyRef.current) return;
-
       const serverLastDate = user.stats?.lastStreakDate || '';
-      if (!serverLastDate) return; // 기록 없으면 스킵
-
+      if (!serverLastDate) return;
       const yesterdayStr = format(subDays(new Date(), 1), 'yyyy-MM-dd');
-
-      // 마지막 스트릭 날짜가 어제도 아니고 오늘도 아니면 → 스트릭 리셋
       if (serverLastDate !== todayStr && serverLastDate !== yesterdayStr) {
         if ((user.stats?.currentStreak || 0) > 0) {
           isBusyRef.current = true;
           try {
-            await updateDocument('users', user.uid, {
-              'stats.currentStreak': 0,
-            });
-            setUser({
-              ...user,
-              stats: {
-                ...user.stats,
-                currentStreak: 0,
-              },
-            });
+            await userApi.update({ 'stats.currentStreak': 0 });
+            setUser({ ...user, stats: { ...user.stats, currentStreak: 0 } });
             setLocalStreakCount(0);
-          } finally {
-            isBusyRef.current = false;
-          }
+          } finally { isBusyRef.current = false; }
         }
       }
     };
-
     const timer = setTimeout(checkStaleStreak, 500);
     return () => clearTimeout(timer);
   }, [user?.uid, isFetchedTasks, isFetchedHabits]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 import { ThemeProvider } from '@/components/common/ThemeProvider';
 import { AuthProvider } from '@/components/common/AuthProvider';
+import { SessionWrapper } from '@/components/common/SessionWrapper';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -33,14 +34,16 @@ export default function RootLayout({
   return (
     <html lang="ko" suppressHydrationWarning>
       <body className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased`}>
-        <ThemeProvider>
-          <AuthProvider>
-            <TooltipProvider>
-              {children}
-              <Toaster richColors position="top-center" />
-            </TooltipProvider>
-          </AuthProvider>
-        </ThemeProvider>
+        <SessionWrapper>
+          <ThemeProvider>
+            <AuthProvider>
+              <TooltipProvider>
+                {children}
+                <Toaster richColors position="top-center" />
+              </TooltipProvider>
+            </AuthProvider>
+          </ThemeProvider>
+        </SessionWrapper>
       </body>
     </html>
   );

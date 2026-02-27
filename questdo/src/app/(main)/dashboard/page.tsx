@@ -16,7 +16,6 @@ import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Task, TaskCategory, TaskPriority, FinanceData } from '@/types/task';
 import { HabitFrequencyType } from '@/types/habit';
-import { Timestamp } from 'firebase/firestore';
 import { Plus, CheckSquare, Repeat, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -38,7 +37,7 @@ export default function DashboardPage() {
       category: 'personal',
       priority: 'medium',
       status: 'todo',
-      dueDate: Timestamp.fromDate(new Date()),
+      dueDate: new Date().toISOString().split('T')[0],
       dueTime: null,
       reminder: { enabled: false, type: 'at_time' },
       isRecurring: false,
@@ -64,7 +63,7 @@ export default function DashboardPage() {
       description: data.description,
       category: data.category,
       priority: data.priority,
-      dueDate: data.dueDate ? Timestamp.fromDate(new Date(data.dueDate)) : null,
+      dueDate: data.dueDate || null,
       dueTime: data.dueTime || null,
       isRecurring: data.isRecurring,
       subtasks: data.subtasks,
@@ -204,7 +203,7 @@ export default function DashboardPage() {
             category: editingTask.category,
             priority: editingTask.priority,
             dueDate: editingTask.dueDate
-              ? editingTask.dueDate.toDate().toISOString().split('T')[0]
+              ? new Date(editingTask.dueDate).toISOString().split('T')[0]
               : '',
             dueTime: editingTask.dueTime || '',
             isRecurring: editingTask.isRecurring,

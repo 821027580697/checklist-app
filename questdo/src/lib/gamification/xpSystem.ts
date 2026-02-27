@@ -20,7 +20,7 @@ export const calculateTaskXp = (task: Task): number => {
   // 마감일 전 완료 보너스
   if (task.dueDate) {
     const now = new Date();
-    const dueDate = task.dueDate.toDate();
+    const dueDate = new Date(task.dueDate);
     if (now < dueDate) {
       xp += XP_BONUS_EARLY;
     }

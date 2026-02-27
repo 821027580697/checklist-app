@@ -156,7 +156,7 @@ export default function TaskDetailPage() {
                   <div className="flex items-center gap-1">
                     <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                     <span>
-                      {format(task.dueDate.toDate(), lang === 'ko' ? 'yyyy.MM.dd' : 'MMM d, yyyy', {
+                      {format(new Date(task.dueDate), lang === 'ko' ? 'yyyy.MM.dd' : 'MMM d, yyyy', {
                         locale: lang === 'ko' ? ko : enUS,
                       })}
                     </span>
@@ -226,7 +226,7 @@ export default function TaskDetailPage() {
           description: task.description,
           category: task.category,
           priority: task.priority,
-          dueDate: task.dueDate ? task.dueDate.toDate().toISOString().split('T')[0] : '',
+          dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
           dueTime: task.dueTime ?? '',
           isRecurring: task.isRecurring,
           subtasks: task.subtasks,

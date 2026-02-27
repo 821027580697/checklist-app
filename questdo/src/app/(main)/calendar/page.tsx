@@ -66,7 +66,7 @@ export default function CalendarPage() {
           events.push({
             id: task.id,
             title: isCompleted ? `✓ ${task.title}` : task.title,
-            date: task.dueDate.toDate().toISOString().split('T')[0],
+            date: new Date(task.dueDate).toISOString().split('T')[0],
             backgroundColor: isCompleted ? '#34C759' : PRIORITY_COLORS[task.priority],
             borderColor: isCompleted ? '#34C759' : PRIORITY_COLORS[task.priority],
             textColor: '#fff',
@@ -87,8 +87,8 @@ export default function CalendarPage() {
       // 완료일이 마감일과 다른 경우 → 완료일에도 표시
       if (task.status === 'completed' && task.completedAt) {
         try {
-          const completedDate = task.completedAt.toDate().toISOString().split('T')[0];
-          const dueDate = task.dueDate?.toDate().toISOString().split('T')[0];
+          const completedDate = new Date(task.completedAt).toISOString().split('T')[0];
+          const dueDate = task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : undefined;
           if (completedDate !== dueDate) {
             events.push({
               id: `${task.id}-completed`,
@@ -146,13 +146,13 @@ export default function CalendarPage() {
         // 마감일이 선택된 날짜인 것
         if (task.dueDate) {
           try {
-            if (task.dueDate.toDate().toISOString().split('T')[0] === selectedDate) return true;
+            if (new Date(task.dueDate).toISOString().split('T')[0] === selectedDate) return true;
           } catch { /* ignore */ }
         }
         // 완료일이 선택된 날짜인 것 (마감일과 다를 때)
         if (task.status === 'completed' && task.completedAt) {
           try {
-            if (task.completedAt.toDate().toISOString().split('T')[0] === selectedDate) return true;
+            if (new Date(task.completedAt).toISOString().split('T')[0] === selectedDate) return true;
           } catch { /* ignore */ }
         }
         return false;

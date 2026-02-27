@@ -1,4 +1,4 @@
-// 내 프로필 페이지 — 프로필 사진 업로드 지원
+// 내 프로필 페이지 — API 클라이언트 기반 (MongoDB)
 'use client';
 
 import { useRef, useState } from 'react';
@@ -13,10 +13,10 @@ import { useTranslation } from '@/hooks/useTranslation';
 import { getLevelInfo } from '@/lib/gamification/levelSystem';
 import { BADGES } from '@/constants/badges';
 import { RARITY_COLORS } from '@/types/badge';
-import { uploadAvatar } from '@/lib/firebase/storage';
-import { updateDocument } from '@/lib/firebase/firestore';
+import { userApi } from '@/lib/api/client';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import imageCompression from 'browser-image-compression';
 import {
   Settings,
   Trophy,
@@ -49,13 +49,11 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // 파일 형식 검증
     if (!file.type.startsWith('image/')) {
       toast.error(lang === 'ko' ? '이미지 파일만 업로드 가능합니다' : 'Only image files allowed');
       return;
     }
 
-    // 파일 크기 검증 (10MB — 내부적으로 압축됨)
     if (file.size > 10 * 1024 * 1024) {
       toast.error(lang === 'ko' ? '파일 크기는 10MB 이하여야 합니다' : 'File must be under 10MB');
       return;
@@ -65,26 +63,30 @@ export default function ProfilePage() {
     toast.info(lang === 'ko' ? '사진을 처리하고 있습니다...' : 'Processing photo...');
 
     try {
-      // 이미지 업로드 (Storage 또는 base64 fallback 자동 처리)
-      const { url, error } = await uploadAvatar(user.uid, file);
-      if (error) throw error;
-      if (!url) throw new Error('Upload failed - no URL returned');
-
-      // Firestore 업데이트
-      const { error: updateError } = await updateDocument('users', user.uid, {
-        avatarUrl: url,
+      // 이미지 압축 후 base64 Data URL로 변환
+      const compressed = await imageCompression(file, {
+        maxWidthOrHeight: 200,
+        maxSizeMB: 0.1,
+        useWebWorker: true,
+        fileType: 'image/jpeg',
       });
-      if (updateError) throw updateError;
 
-      // 로컬 상태 업데이트
-      setUser({ ...user, avatarUrl: url });
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(compressed);
+      });
+
+      // API를 통해 avatarUrl 업데이트
+      await userApi.update({ avatarUrl: dataUrl });
+      setUser({ ...user, avatarUrl: dataUrl });
       toast.success(lang === 'ko' ? '프로필 사진이 변경되었습니다 ✅' : 'Profile photo updated ✅');
     } catch (err) {
       console.error('Failed to upload avatar:', err);
       toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다. 다시 시도해주세요.' : 'Failed to upload. Please try again.');
     } finally {
       setIsUploading(false);
-      // 파일 input 리셋 (같은 파일 재선택 가능)
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -124,7 +126,6 @@ export default function ProfilePage() {
                   )}
                 </div>
 
-                {/* 카메라 아이콘 오버레이 */}
                 <button
                   onClick={handleAvatarClick}
                   disabled={isUploading}
@@ -133,7 +134,6 @@ export default function ProfilePage() {
                   <Camera className="h-3.5 w-3.5" />
                 </button>
 
-                {/* 숨겨진 파일 입력 */}
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -147,7 +147,6 @@ export default function ProfilePage() {
                 {lang === 'ko' ? '사진을 탭하여 변경' : 'Tap to change photo'}
               </p>
 
-              {/* 닉네임 & 레벨 */}
               <h1 className="text-xl font-bold mt-2">{user.nickname}</h1>
               <div className="flex items-center gap-2 mt-1">
                 <Badge variant="secondary" className="rounded-full">
@@ -156,14 +155,12 @@ export default function ProfilePage() {
                 <span className="text-sm text-muted-foreground">{user.title}</span>
               </div>
 
-              {/* 자기소개 */}
               {user.bio && (
                 <p className="mt-3 text-sm text-muted-foreground max-w-xs">
                   {user.bio}
                 </p>
               )}
 
-              {/* XP 프로그레스 */}
               <div className="w-full max-w-xs mt-4">
                 <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                   <span>XP</span>
@@ -172,7 +169,6 @@ export default function ProfilePage() {
                 <Progress value={levelInfo.progressPercent} className="h-2" />
               </div>
 
-              {/* 팔로워/팔로잉 */}
               <div className="flex items-center gap-6 mt-4">
                 <div className="text-center">
                   <p className="text-lg font-bold">{user.followersCount}</p>
@@ -185,7 +181,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              {/* 설정 버튼 */}
               <Link href="/settings" className="mt-4">
                 <Button variant="outline" size="sm" className="rounded-full">
                   <Settings className="mr-1 h-4 w-4" />

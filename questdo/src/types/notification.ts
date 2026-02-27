@@ -1,5 +1,4 @@
 // 알림 관련 타입 정의
-import { Timestamp } from 'firebase/firestore';
 
 // 알림 유형
 export type NotificationType =
@@ -23,7 +22,7 @@ export interface Notification {
   title: { ko: string; en: string };
   message: { ko: string; en: string };
   isRead: boolean;
-  relatedId: string | null;        // 관련 postId, taskId, badgeId 등
+  relatedId: string | null;
   relatedType: NotificationRelatedType;
-  createdAt: Timestamp;
+  createdAt: string; // ISO 문자열
 }

@@ -1,4 +1,4 @@
-// 영수증 스캐너 — 사진 촬영/업로드 + OCR 인식 + 결과 표시
+// 영수증 스캐너 — 사진 촬영/업로드 + OCR 인식 + 결과 표시 (Firebase 제거)
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
@@ -6,8 +6,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useReceiptOCR, ReceiptData } from '@/hooks/useReceiptOCR';
-import { useAuthStore } from '@/stores/authStore';
-import { uploadReceiptImage } from '@/lib/firebase/storage';
 import { formatCurrency } from '@/hooks/useExchangeRate';
 import { TRANSACTION_TYPE_LABELS, PAYMENT_METHODS, CurrencyCode, TransactionType } from '@/types/task';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -34,14 +32,12 @@ interface ReceiptScannerProps {
 export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
   const { language } = useTranslation();
   const lang = language as 'ko' | 'en';
-  const user = useAuthStore((s) => s.user);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const { isProcessing, progress, result, error, processImage, reset } = useReceiptOCR();
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
 
   // 파일 선택 핸들러
   const handleFileSelect = useCallback(
@@ -49,7 +45,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
       const file = e.target.files?.[0];
       if (!file) return;
 
-      // 파일 형식 검증
       const validTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
       if (!validTypes.includes(file.type)) {
         toast.error(
@@ -60,7 +55,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
         return;
       }
 
-      // 파일 크기 제한 (10MB)
       if (file.size > 10 * 1024 * 1024) {
         toast.error(
           lang === 'ko' ? '파일 크기는 10MB 이하여야 합니다' : 'File must be under 10MB',
@@ -70,40 +64,20 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
 
       setSelectedFile(file);
 
-      // 미리보기 생성
       const reader = new FileReader();
       reader.onload = (ev) => setPreviewUrl(ev.target?.result as string);
       reader.readAsDataURL(file);
 
-      // OCR 시작
       await processImage(file);
     },
     [processImage, lang],
   );
 
-  // 결과 적용
+  // 결과 적용 (Firebase Storage 업로드 제거, base64 미리보기만 전달)
   const handleApply = useCallback(async () => {
     if (!result) return;
-
-    let receiptImageUrl: string | undefined;
-
-    // Firebase에 영수증 이미지 업로드
-    if (selectedFile && user) {
-      setIsUploading(true);
-      try {
-        const { url, error: uploadError } = await uploadReceiptImage(user.uid, selectedFile);
-        if (uploadError) throw uploadError;
-        receiptImageUrl = url || undefined;
-      } catch {
-        // 업로드 실패해도 나머지 데이터는 적용
-        console.error('영수증 이미지 업로드 실패');
-      } finally {
-        setIsUploading(false);
-      }
-    }
-
-    onResult({ ...result, receiptImageUrl });
-  }, [result, selectedFile, user, onResult]);
+    onResult({ ...result, receiptImageUrl: previewUrl || undefined });
+  }, [result, previewUrl, onResult]);
 
   // 재시도
   const handleRetry = useCallback(() => {
@@ -112,7 +86,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
     setSelectedFile(null);
   }, [reset]);
 
-  // 프로그레스 상태 텍스트
   const getProgressText = () => {
     if (progress < 20) return lang === 'ko' ? '이미지 준비 중...' : 'Preparing image...';
     if (progress < 90) return lang === 'ko' ? '텍스트 인식 중...' : 'Recognizing text...';
@@ -127,7 +100,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
       exit={{ opacity: 0, y: 8 }}
       className="rounded-2xl border border-border/50 bg-background overflow-hidden"
     >
-      {/* 헤더 */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
         <div className="flex items-center gap-2">
           <Receipt className="h-4 w-4 text-[#AF52DE]" />
@@ -147,9 +119,7 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
       </div>
 
       <div className="p-4 space-y-4">
-        {/* 이미지 미리보기 / 업로드 영역 */}
         {!previewUrl ? (
-          // 업로드 영역
           <div className="space-y-3">
             <div className="rounded-xl border-2 border-dashed border-border/50 bg-secondary/20 p-8 text-center">
               <div className="flex flex-col items-center gap-3">
@@ -170,7 +140,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
             </div>
 
             <div className="flex gap-2">
-              {/* 카메라 촬영 */}
               <Button
                 type="button"
                 variant="outline"
@@ -189,7 +158,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                 onChange={handleFileSelect}
               />
 
-              {/* 파일 업로드 */}
               <Button
                 type="button"
                 variant="outline"
@@ -209,9 +177,7 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
             </div>
           </div>
         ) : (
-          // 이미지 미리보기 + OCR 진행
           <div className="space-y-3">
-            {/* 이미지 프리뷰 */}
             <div className="relative rounded-xl overflow-hidden bg-secondary/30 max-h-48">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
@@ -229,7 +195,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
               )}
             </div>
 
-            {/* 프로그레스 바 */}
             {isProcessing && (
               <div className="space-y-1">
                 <Progress value={progress} className="h-2" />
@@ -239,7 +204,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
               </div>
             )}
 
-            {/* 에러 표시 */}
             {error && (
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-[#FF3B30]/10 text-[#FF3B30]">
                 <AlertCircle className="h-4 w-4 shrink-0" />
@@ -247,7 +211,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
               </div>
             )}
 
-            {/* OCR 결과 표시 */}
             <AnimatePresence>
               {result && !isProcessing && (
                 <motion.div
@@ -255,7 +218,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                   animate={{ opacity: 1, y: 0 }}
                   className="space-y-3"
                 >
-                  {/* 성공 배너 */}
                   <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[#34C759]/10">
                     <Sparkles className="h-4 w-4 text-[#34C759]" />
                     <span className="text-[12px] font-medium text-[#34C759]">
@@ -265,9 +227,7 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                     </span>
                   </div>
 
-                  {/* 인식된 데이터 */}
                   <div className="rounded-xl border border-border/30 divide-y divide-border/20">
-                    {/* 가맹점 */}
                     {result.merchant && (
                       <div className="flex items-center justify-between px-3.5 py-2.5">
                         <span className="text-[11px] text-muted-foreground">
@@ -277,7 +237,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                       </div>
                     )}
 
-                    {/* 금액 */}
                     <div className="flex items-center justify-between px-3.5 py-2.5">
                       <span className="text-[11px] text-muted-foreground">
                         {lang === 'ko' ? '금액' : 'Amount'}
@@ -289,7 +248,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                       </span>
                     </div>
 
-                    {/* 날짜 */}
                     <div className="flex items-center justify-between px-3.5 py-2.5">
                       <span className="text-[11px] text-muted-foreground">
                         {lang === 'ko' ? '날짜' : 'Date'}
@@ -297,7 +255,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                       <span className="text-[13px] font-medium">{result.date}</span>
                     </div>
 
-                    {/* 결제 수단 */}
                     {result.paymentMethod && (
                       <div className="flex items-center justify-between px-3.5 py-2.5">
                         <span className="text-[11px] text-muted-foreground">
@@ -310,7 +267,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                       </div>
                     )}
 
-                    {/* 통화 */}
                     <div className="flex items-center justify-between px-3.5 py-2.5">
                       <span className="text-[11px] text-muted-foreground">
                         {lang === 'ko' ? '통화' : 'Currency'}
@@ -319,7 +275,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                     </div>
                   </div>
 
-                  {/* 인식된 항목들 */}
                   {result.items && result.items.length > 0 && (
                     <details className="group" open>
                       <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors flex items-center gap-1">
@@ -345,7 +300,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                     </details>
                   )}
 
-                  {/* OCR 원본 텍스트 (접기/펼치기) */}
                   <details className="group">
                     <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors flex items-center gap-1">
                       <span>{lang === 'ko' ? '인식된 원본 텍스트 보기' : 'View raw OCR text'}</span>
@@ -358,7 +312,6 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
               )}
             </AnimatePresence>
 
-            {/* 하단 버튼 */}
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -375,19 +328,9 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                   type="button"
                   className="flex-1 h-9 rounded-xl text-[12px]"
                   onClick={handleApply}
-                  disabled={isUploading}
                 >
-                  {isUploading ? (
-                    <span className="flex items-center gap-1.5">
-                      <span className="h-3 w-3 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      {lang === 'ko' ? '저장 중...' : 'Saving...'}
-                    </span>
-                  ) : (
-                    <>
-                      <Check className="h-3.5 w-3.5 mr-1" />
-                      {lang === 'ko' ? '적용하기' : 'Apply'}
-                    </>
-                  )}
+                  <Check className="h-3.5 w-3.5 mr-1" />
+                  {lang === 'ko' ? '적용하기' : 'Apply'}
                 </Button>
               )}
             </div>

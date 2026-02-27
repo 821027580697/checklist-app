@@ -1,4 +1,4 @@
-// 소셜 피드 — 유저 검색 + 친구 추가 + Firestore 기반
+// 소셜 피드 — API 클라이언트 기반 (MongoDB)
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -31,25 +31,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
 import { toast } from 'sonner';
-import { db } from '@/lib/firebase/config';
-import {
-  collection,
-  addDoc,
-  getDocs,
-  getDoc,
-  query,
-  orderBy,
-  limit,
-  serverTimestamp,
-  updateDoc,
-  doc,
-  arrayUnion,
-  arrayRemove,
-  where,
-  increment,
-  Timestamp,
-  deleteDoc,
-} from 'firebase/firestore';
+import { postApi, commentApi, followApi, userApi } from '@/lib/api/client';
 import { Post, Comment } from '@/types/post';
 import { User } from '@/types/user';
 
@@ -81,14 +63,9 @@ export default function FeedPage() {
 
   // 팔로잉 목록 로드
   const loadFollowingIds = useCallback(async () => {
-    if (!user || !db) return;
+    if (!user) return;
     try {
-      const q = query(
-        collection(db, 'follows'),
-        where('followerId', '==', user.uid),
-      );
-      const snapshot = await getDocs(q);
-      const ids = snapshot.docs.map((d) => d.data().followingId as string);
+      const ids = await followApi.list();
       setFollowingIds(ids);
     } catch (err) {
       console.error('Failed to load following ids:', err);
@@ -101,19 +78,9 @@ export default function FeedPage() {
 
   // 게시글 로드
   const loadPosts = useCallback(async () => {
-    if (!db) return;
     setIsLoadingPosts(true);
     try {
-      const q = query(
-        collection(db, 'posts'),
-        orderBy('createdAt', 'desc'),
-        limit(30),
-      );
-      const snapshot = await getDocs(q);
-      const loadedPosts = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as Post[];
+      const loadedPosts = (await postApi.list()) as unknown as Post[];
       setPosts(loadedPosts);
     } catch (err) {
       console.error('Failed to load posts:', err);
@@ -129,16 +96,11 @@ export default function FeedPage() {
 
   // 게시글 작성
   const handleCreatePost = async () => {
-    if (!user || !db || !postContent.trim()) return;
+    if (!user || !postContent.trim()) return;
     setIsSubmittingPost(true);
     try {
-      const newPost = {
-        userId: user.uid,
-        userNickname: user.nickname,
-        userAvatar: user.avatarUrl || user.nickname?.charAt(0) || '?',
-        userLevel: user.level,
-        userTitle: user.title,
-        type: 'general' as const,
+      await postApi.create({
+        type: 'general',
         content: {
           text: postContent.trim(),
           imageUrl: null,
@@ -146,17 +108,7 @@ export default function FeedPage() {
           badgeRef: null,
           milestoneType: null,
         },
-        reactions: {
-          likes: [],
-          cheers: [],
-          fires: [],
-        },
-        totalReactions: 0,
-        commentsCount: 0,
-        createdAt: serverTimestamp(),
-      };
-
-      await addDoc(collection(db, 'posts'), newPost);
+      });
       setPostContent('');
       setShowCreatePost(false);
       toast.success(lang === 'ko' ? '게시글이 작성되었습니다' : 'Post created');
@@ -171,20 +123,15 @@ export default function FeedPage() {
 
   // 리액션 토글
   const handleReaction = async (postId: string, type: 'likes' | 'fires') => {
-    if (!user || !db) return;
+    if (!user) return;
     try {
-      const postRef = doc(db, 'posts', postId);
       const post = posts.find((p) => p.id === postId);
       if (!post) return;
 
       const reactions = post.reactions?.[type] || [];
       const isReacted = reactions.includes(user.uid);
 
-      await updateDoc(postRef, {
-        [`reactions.${type}`]: isReacted ? arrayRemove(user.uid) : arrayUnion(user.uid),
-        totalReactions: increment(isReacted ? -1 : 1),
-      });
-
+      // 낙관적 업데이트
       setPosts((prev) =>
         prev.map((p) => {
           if (p.id !== postId) return p;
@@ -198,37 +145,21 @@ export default function FeedPage() {
           };
         }),
       );
+
+      await postApi.react(postId, type);
     } catch (err) {
       console.error('Failed to react:', err);
       toast.error(lang === 'ko' ? '반응 처리에 실패했습니다' : 'Failed to update reaction');
+      loadPosts(); // 롤백
     }
   };
 
   // 댓글 로드
   const loadComments = async (postId: string) => {
-    if (!db) return;
     setIsLoadingComments(true);
     try {
-      // 복합 인덱스 없이도 동작하도록 postId 필터만 사용 후 클라이언트 정렬
-      const q = query(
-        collection(db, 'comments'),
-        where('postId', '==', postId),
-        limit(100),
-      );
-      const snapshot = await getDocs(q);
-      const loadedComments = snapshot.docs.map((d) => ({
-        id: d.id,
-        ...d.data(),
-      })) as Comment[];
-
-      // 클라이언트에서 createdAt 기준 오름차순 정렬
-      loadedComments.sort((a, b) => {
-        const aTime = a.createdAt?.toDate?.()?.getTime?.() || 0;
-        const bTime = b.createdAt?.toDate?.()?.getTime?.() || 0;
-        return aTime - bTime;
-      });
-
-      setComments(loadedComments);
+      const loaded = (await commentApi.list(postId)) as unknown as Comment[];
+      setComments(loaded);
     } catch (err) {
       console.error('Failed to load comments:', err);
       toast.error(lang === 'ko' ? '댓글을 불러오지 못했습니다' : 'Failed to load comments');
@@ -239,22 +170,12 @@ export default function FeedPage() {
 
   // 댓글 작성
   const handleAddComment = async (postId: string) => {
-    if (!user || !db || !commentText.trim()) return;
+    if (!user || !commentText.trim()) return;
     const trimmedText = commentText.trim();
     try {
-      const commentData = {
-        postId,
-        userId: user.uid,
-        userNickname: user.nickname,
-        userAvatar: user.avatarUrl || user.nickname?.charAt(0) || '?',
-        text: trimmedText,
-        createdAt: serverTimestamp(),
-      };
-
-      // 즉시 입력 필드 초기화 (UX 개선)
       setCommentText('');
 
-      // 낙관적 업데이트: 로컬에 바로 댓글 표시
+      // 낙관적 업데이트
       const optimisticComment: Comment = {
         id: `temp-${Date.now()}`,
         postId,
@@ -262,21 +183,18 @@ export default function FeedPage() {
         userNickname: user.nickname || '',
         userAvatar: user.avatarUrl || user.nickname?.charAt(0) || '?',
         text: trimmedText,
-        createdAt: Timestamp.now(),
+        createdAt: new Date().toISOString(),
       };
       setComments((prev) => [...prev, optimisticComment]);
 
-      // Firestore에 댓글 저장
-      const docRef = await addDoc(collection(db, 'comments'), commentData);
+      const created = (await commentApi.create({ postId, text: trimmedText })) as unknown as Comment & { _id?: string };
 
       // 낙관적 댓글 ID를 실제 ID로 교체
       setComments((prev) =>
-        prev.map((c) => (c.id === optimisticComment.id ? { ...c, id: docRef.id } : c)),
+        prev.map((c) => (c.id === optimisticComment.id ? { ...c, id: created.id || created._id || c.id } : c)),
       );
 
       // 게시글 댓글 수 증가
-      const postRef = doc(db, 'posts', postId);
-      await updateDoc(postRef, { commentsCount: increment(1) });
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId ? { ...p, commentsCount: (p.commentsCount || 0) + 1 } : p,
@@ -287,7 +205,6 @@ export default function FeedPage() {
     } catch (err) {
       console.error('Failed to add comment:', err);
       toast.error(lang === 'ko' ? '댓글 작성에 실패했습니다' : 'Failed to add comment');
-      // 실패 시 낙관적 업데이트 롤백
       setCommentText(trimmedText);
       loadComments(postId);
     }
@@ -305,21 +222,11 @@ export default function FeedPage() {
 
   // ── 유저 검색 ──
   const handleSearch = async () => {
-    if (!db || !searchQuery.trim()) return;
+    if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
-      // Firestore에서 닉네임 검색 (prefix 매칭)
-      const q = query(
-        collection(db, 'users'),
-        where('nickname', '>=', searchQuery.trim()),
-        where('nickname', '<=', searchQuery.trim() + '\uf8ff'),
-        limit(20),
-      );
-      const snapshot = await getDocs(q);
-      const results = snapshot.docs
-        .map((d) => ({ uid: d.id, ...d.data() } as User))
-        .filter((u) => u.uid !== user?.uid); // 자신 제외
-      setSearchResults(results);
+      const results = (await userApi.search(searchQuery.trim())) as unknown as User[];
+      setSearchResults(results.filter((u) => u.uid !== user?.uid));
     } catch (err) {
       console.error('Failed to search users:', err);
       toast.error(lang === 'ko' ? '검색에 실패했습니다' : 'Search failed');
@@ -330,28 +237,14 @@ export default function FeedPage() {
 
   // ── 팔로우 / 언팔로우 ──
   const handleFollow = async (targetUserId: string) => {
-    if (!user || !db) return;
+    if (!user) return;
     try {
-      // follows 컬렉션에 문서 추가
-      await addDoc(collection(db, 'follows'), {
-        followerId: user.uid,
-        followingId: targetUserId,
-        createdAt: serverTimestamp(),
-      });
-
-      // 카운터 업데이트
-      const myRef = doc(db, 'users', user.uid);
-      const targetRef = doc(db, 'users', targetUserId);
-      await updateDoc(myRef, { followingCount: increment(1) });
-      await updateDoc(targetRef, { followersCount: increment(1) });
-
-      // 로컬 상태 업데이트
+      await followApi.follow(targetUserId);
       setFollowingIds((prev) => [...prev, targetUserId]);
       setUser({
         ...user,
         followingCount: (user.followingCount || 0) + 1,
       });
-
       toast.success(lang === 'ko' ? '친구가 추가되었습니다!' : 'Friend added!');
     } catch (err) {
       console.error('Failed to follow:', err);
@@ -360,32 +253,14 @@ export default function FeedPage() {
   };
 
   const handleUnfollow = async (targetUserId: string) => {
-    if (!user || !db) return;
+    if (!user) return;
     try {
-      // follows 컬렉션에서 문서 삭제
-      const q = query(
-        collection(db, 'follows'),
-        where('followerId', '==', user.uid),
-        where('followingId', '==', targetUserId),
-      );
-      const snapshot = await getDocs(q);
-      for (const d of snapshot.docs) {
-        await deleteDoc(doc(db, 'follows', d.id));
-      }
-
-      // 카운터 업데이트
-      const myRef = doc(db, 'users', user.uid);
-      const targetRef = doc(db, 'users', targetUserId);
-      await updateDoc(myRef, { followingCount: increment(-1) });
-      await updateDoc(targetRef, { followersCount: increment(-1) });
-
-      // 로컬 상태 업데이트
+      await followApi.unfollow(targetUserId);
       setFollowingIds((prev) => prev.filter((id) => id !== targetUserId));
       setUser({
         ...user,
         followingCount: Math.max(0, (user.followingCount || 0) - 1),
       });
-
       toast.success(lang === 'ko' ? '팔로우를 취소했습니다' : 'Unfollowed');
     } catch (err) {
       console.error('Failed to unfollow:', err);
@@ -397,10 +272,10 @@ export default function FeedPage() {
   const followingPosts = posts.filter((p) => followingIds.includes(p.userId));
 
   // 시간 표시
-  const getTimeAgo = (timestamp: Timestamp | null | undefined): string => {
+  const getTimeAgo = (timestamp: string | null | undefined): string => {
     if (!timestamp) return '';
     try {
-      const date = timestamp.toDate();
+      const date = new Date(timestamp);
       const now = new Date();
       const diffMs = now.getTime() - date.getTime();
       const diffMin = Math.floor(diffMs / 60000);
@@ -724,7 +599,6 @@ export default function FeedPage() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            {/* 검색 입력 */}
             <div className="flex gap-2">
               <Input
                 value={searchQuery}
@@ -749,7 +623,6 @@ export default function FeedPage() {
               </Button>
             </div>
 
-            {/* 검색 결과 */}
             {searchResults.length > 0 ? (
               <div className="space-y-2">
                 <p className="text-[12px] text-muted-foreground">

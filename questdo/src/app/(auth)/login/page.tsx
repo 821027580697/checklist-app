@@ -1,4 +1,4 @@
-// 로그인 페이지 — Google 전용
+// 로그인 페이지 — Google 전용 (NextAuth)
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -6,14 +6,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { signInWithGoogle } from '@/lib/firebase/auth';
+import { signIn } from 'next-auth/react';
 import { useAuthStore } from '@/stores/authStore';
-import { useTranslation } from '@/hooks/useTranslation';
 import { toast } from 'sonner';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { t } = useTranslation();
   const { isAuthenticated, needsOnboarding, isLoading } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -31,30 +29,7 @@ export default function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      const result = await signInWithGoogle();
-
-      // 사용자 취소 → 조용히 무시
-      if ('cancelled' in result && result.cancelled) {
-        setIsSubmitting(false);
-        return;
-      }
-
-      // redirect 방식으로 전환됨 (모바일) → 페이지가 새로고침되므로 대기
-      if (!result.user && !result.error && !result.message) {
-        return; // redirect 진행 중
-      }
-
-      // 에러 발생
-      if (result.error || !result.user) {
-        if (result.message) {
-          toast.error(result.message);
-        }
-        setIsSubmitting(false);
-        return;
-      }
-
-      // 로그인 성공 → AuthProvider가 onAuthStateChanged로 처리
-      // isSubmitting은 해제하지 않음 (redirect가 이루어질 때까지 버튼 비활성화 유지)
+      await signIn('google', { callbackUrl: '/dashboard' });
     } catch {
       toast.error('오류가 발생했습니다. 다시 시도해주세요.');
       setIsSubmitting(false);
@@ -71,7 +46,6 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
-      {/* 배경 그라데이션 */}
       <div className="absolute inset-0 -z-10 overflow-hidden">
         <div className="absolute left-1/2 top-1/4 -translate-x-1/2 h-[600px] w-[600px] rounded-full bg-gradient-to-br from-[#007AFF]/6 to-[#5856D6]/4 blur-[100px]" />
       </div>
@@ -82,26 +56,22 @@ export default function LoginPage() {
         transition={{ duration: 0.6, ease: [0.25, 0.46, 0.45, 0.94] }}
         className="w-full max-w-sm text-center"
       >
-        {/* 로고 */}
         <div className="mb-12">
           <Link href="/" className="inline-flex items-center gap-2">
             <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[#007AFF] to-[#5856D6] shadow-lg shadow-[#007AFF]/20">
               <span className="text-2xl font-bold text-white">Q</span>
             </div>
           </Link>
-          <h1 className="mt-6 text-[28px] font-bold tracking-tight text-foreground">
-            QuestDo
-          </h1>
+          <h1 className="mt-6 text-[28px] font-bold tracking-tight text-foreground">QuestDo</h1>
           <p className="mt-2 text-[15px] text-muted-foreground leading-relaxed">
             할 일을 게임처럼, 성장을 눈에 보이게
           </p>
         </div>
 
-        {/* Google 로그인 버튼 */}
         <div className="space-y-4">
           <Button
             variant="outline"
-            className="w-full h-12 rounded-2xl text-[15px] font-medium border-border/60 bg-background hover:bg-secondary dark:hover:bg-[#2C2C2E] shadow-sm transition-all duration-200 hover:shadow-md"
+            className="w-full h-12 rounded-2xl text-[15px] font-medium border-border/60 bg-background hover:bg-secondary shadow-sm transition-all duration-200 hover:shadow-md"
             onClick={handleGoogleLogin}
             disabled={isSubmitting}
           >

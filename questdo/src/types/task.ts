@@ -1,5 +1,4 @@
 // 할 일(Task) 관련 타입 정의
-import { Timestamp } from 'firebase/firestore';
 
 // 할 일 카테고리
 export type TaskCategory =
@@ -34,8 +33,8 @@ export interface Subtask {
 // 반복 패턴 설정
 export interface RecurringPattern {
   frequency: RecurringFrequency;
-  daysOfWeek: number[];     // 0(일) ~ 6(토)
-  endDate: Timestamp | null;
+  daysOfWeek: number[];
+  endDate: string | null;  // ISO 문자열
 }
 
 // 리마인더 설정
@@ -49,48 +48,28 @@ export type TransactionType = 'income' | 'expense' | 'transfer';
 
 // 통화 코드
 export type CurrencyCode =
-  | 'KRW'
-  | 'USD'
-  | 'EUR'
-  | 'JPY'
-  | 'GBP'
-  | 'CNY'
-  | 'AUD'
-  | 'CAD'
-  | 'CHF'
-  | 'HKD'
-  | 'SGD'
-  | 'THB'
-  | 'VND';
+  | 'KRW' | 'USD' | 'EUR' | 'JPY' | 'GBP' | 'CNY'
+  | 'AUD' | 'CAD' | 'CHF' | 'HKD' | 'SGD' | 'THB' | 'VND';
 
 // 지출 카테고리
 export type ExpenseCategory =
-  | 'food'        // 식비
-  | 'transport'   // 교통비
-  | 'shopping'    // 쇼핑
-  | 'housing'     // 주거/생활
-  | 'medical'     // 의료/건강
-  | 'education'   // 교육
-  | 'entertainment' // 여가/문화
-  | 'communication' // 통신
-  | 'insurance'   // 보험
-  | 'savings'     // 저축/투자
-  | 'salary'      // 급여 (수입)
-  | 'other_expense'; // 기타
+  | 'food' | 'transport' | 'shopping' | 'housing' | 'medical'
+  | 'education' | 'entertainment' | 'communication' | 'insurance'
+  | 'savings' | 'salary' | 'other_expense';
 
 // 재정 데이터 인터페이스
 export interface FinanceData {
-  transactionType: TransactionType;      // 수입/지출/이체
-  amount: number;                         // 금액
-  currency: CurrencyCode;                // 통화
-  expenseCategory?: ExpenseCategory;     // 지출 카테고리
-  convertedAmount?: number;               // 환산 금액 (기준 통화)
-  convertedCurrency?: CurrencyCode;       // 환산 통화
-  exchangeRate?: number;                  // 적용 환율
-  paymentMethod?: string;                 // 결제 수단
-  merchant?: string;                      // 가맹점/상호
-  memo?: string;                          // 메모
-  receiptImageUrl?: string;              // 영수증 이미지 URL
+  transactionType: TransactionType;
+  amount: number;
+  currency: CurrencyCode;
+  expenseCategory?: ExpenseCategory;
+  convertedAmount?: number;
+  convertedCurrency?: CurrencyCode;
+  exchangeRate?: number;
+  paymentMethod?: string;
+  merchant?: string;
+  memo?: string;
+  receiptImageUrl?: string;
 }
 
 // 통화 라벨 (다국어)
@@ -110,14 +89,12 @@ export const CURRENCY_LABELS: Record<CurrencyCode, { ko: string; en: string; sym
   VND: { ko: '베트남 동 (VND)', en: 'VND', symbol: '₫' },
 };
 
-// 거래 유형 라벨 (다국어)
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, { ko: string; en: string }> = {
   income: { ko: '수입', en: 'Income' },
   expense: { ko: '지출', en: 'Expense' },
   transfer: { ko: '이체', en: 'Transfer' },
 };
 
-// 결제 수단 목록
 export const PAYMENT_METHODS = [
   { value: 'cash', ko: '현금', en: 'Cash' },
   { value: 'credit_card', ko: '신용카드', en: 'Credit Card' },
@@ -127,7 +104,6 @@ export const PAYMENT_METHODS = [
   { value: 'other', ko: '기타', en: 'Other' },
 ];
 
-// 지출 카테고리 라벨 (다국어)
 export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, { ko: string; en: string; emoji: string }> = {
   food: { ko: '식비', en: 'Food', emoji: '🍽️' },
   transport: { ko: '교통', en: 'Transport', emoji: '🚗' },
@@ -147,22 +123,22 @@ export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, { ko: string; en: 
 export interface Task {
   id: string;
   userId: string;
-  title: string;                // 할 일 제목 (최대 100자)
-  description: string;          // 상세 설명 (최대 500자)
-  category: TaskCategory;       // 카테고리
+  title: string;
+  description: string;
+  category: TaskCategory;
   priority: TaskPriority;
   status: TaskStatus;
-  dueDate: Timestamp | null;    // 마감일
-  dueTime: string | null;       // 마감 시간 (HH:mm)
+  dueDate: string | null;   // ISO 문자열
+  dueTime: string | null;
   reminder: TaskReminder;
   isRecurring: boolean;
   recurringPattern: RecurringPattern | null;
   subtasks: Subtask[];
-  financeData?: FinanceData;       // 재정/가계부 데이터 (카테고리가 finance일 때)
-  xpEarned: number;             // 완료 시 획득한 XP
-  completedAt: Timestamp | null;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  financeData?: FinanceData;
+  xpEarned: number;
+  completedAt: string | null; // ISO 문자열
+  createdAt: string;
+  updatedAt: string;
 }
 
 // 카테고리별 색상 매핑
@@ -177,7 +153,6 @@ export const CATEGORY_COLORS: Record<TaskCategory, string> = {
   other: '#8E8E93',
 };
 
-// 카테고리 라벨 (다국어)
 export const CATEGORY_LABELS: Record<TaskCategory, { ko: string; en: string }> = {
   work: { ko: '업무', en: 'Work' },
   personal: { ko: '개인', en: 'Personal' },
@@ -189,7 +164,6 @@ export const CATEGORY_LABELS: Record<TaskCategory, { ko: string; en: string }> =
   other: { ko: '기타', en: 'Other' },
 };
 
-// 우선순위 색상 매핑
 export const PRIORITY_COLORS: Record<TaskPriority, string> = {
   urgent: '#FF3B30',
   high: '#FF9500',
@@ -197,7 +171,6 @@ export const PRIORITY_COLORS: Record<TaskPriority, string> = {
   low: '#8E8E93',
 };
 
-// 우선순위 라벨 (다국어)
 export const PRIORITY_LABELS: Record<TaskPriority, { ko: string; en: string }> = {
   urgent: { ko: '긴급', en: 'Urgent' },
   high: { ko: '높음', en: 'High' },

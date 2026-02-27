@@ -1,4 +1,4 @@
-// 게이미피케이션 통합 훅 — XP 획득, 레벨업, 배지 체크를 한곳에서 관리
+// 게이미피케이션 통합 훅 — XP 획득, 레벨업, 배지 체크 (MongoDB 기반)
 'use client';
 
 import { useState, useCallback } from 'react';
@@ -6,10 +6,9 @@ import { useAuthStore } from '@/stores/authStore';
 import { checkLevelUp } from '@/lib/gamification/levelSystem';
 import { checkNewBadges } from '@/lib/gamification/badgeSystem';
 import { Badge } from '@/types/badge';
-import { updateDocument } from '@/lib/firebase/firestore';
+import { userApi } from '@/lib/api/client';
 import { useUIStore } from '@/stores/uiStore';
 
-// 게이미피케이션 이벤트 상태
 interface GamificationEvent {
   xpGained: number | null;
   levelUp: { level: number; newTitle: string | null } | null;
@@ -21,7 +20,6 @@ export function useGamification() {
   const setUser = useAuthStore((state) => state.setUser);
   const language = useUIStore((state) => state.language);
 
-  // 애니메이션 표시 상태
   const [showXP, setShowXP] = useState(false);
   const [xpAmount, setXpAmount] = useState(0);
   const [showLevelUp, setShowLevelUp] = useState(false);
@@ -29,37 +27,25 @@ export function useGamification() {
   const [showBadge, setShowBadge] = useState(false);
   const [unlockedBadge, setUnlockedBadge] = useState<Badge | null>(null);
 
-  // XP 획득 처리 + 레벨업 + 배지 체크
   const awardXP = useCallback(
     async (xp: number): Promise<GamificationEvent> => {
       if (!user || xp <= 0) return { xpGained: null, levelUp: null, badgeUnlocked: null };
 
-      const result: GamificationEvent = {
-        xpGained: xp,
-        levelUp: null,
-        badgeUnlocked: null,
-      };
+      const result: GamificationEvent = { xpGained: xp, levelUp: null, badgeUnlocked: null };
 
-      // 1) XP 토스트 표시
       setXpAmount(xp);
       setShowXP(true);
       setTimeout(() => setShowXP(false), 1500);
 
-      // 2) 레벨업 체크
       const levelResult = checkLevelUp(user.level, user.totalXp, xp, language);
       if (levelResult.didLevelUp) {
-        result.levelUp = {
-          level: levelResult.newLevel,
-          newTitle: levelResult.newTitle,
-        };
-        // 약간의 딜레이 후 레벨업 모달
+        result.levelUp = { level: levelResult.newLevel, newTitle: levelResult.newTitle };
         setTimeout(() => {
           setLevelUpInfo(result.levelUp);
           setShowLevelUp(true);
         }, 1600);
       }
 
-      // 3) 사용자 정보 업데이트
       const newTotalXp = user.totalXp + xp;
       const updatedUser = {
         ...user,
@@ -69,12 +55,7 @@ export function useGamification() {
         title: levelResult.newTitle || user.title,
       };
 
-      // 4) 배지 체크
-      const badgeResult = checkNewBadges(
-        updatedUser.stats,
-        updatedUser.level,
-        updatedUser.badges,
-      );
+      const badgeResult = checkNewBadges(updatedUser.stats, updatedUser.level, updatedUser.badges);
       if (badgeResult.newBadges.length > 0) {
         const firstBadge = badgeResult.newBadges[0];
         result.badgeUnlocked = firstBadge;
@@ -89,9 +70,8 @@ export function useGamification() {
         }, delay);
       }
 
-      // 5) Zustand + Firestore 업데이트
       setUser(updatedUser);
-      await updateDocument('users', user.uid, {
+      await userApi.update({
         xp: updatedUser.xp,
         totalXp: updatedUser.totalXp,
         level: updatedUser.level,
@@ -104,36 +84,26 @@ export function useGamification() {
     [user, setUser, language],
   );
 
-  // 통계 업데이트 (완료 시 등)
   const updateStats = useCallback(
     async (updates: Partial<NonNullable<typeof user>['stats']>) => {
       if (!user) return;
-
       const newStats = { ...user.stats, ...updates };
       const updatedUser = { ...user, stats: newStats };
       setUser(updatedUser);
-
-      await updateDocument('users', user.uid, { stats: newStats });
+      await userApi.update({ stats: newStats });
     },
     [user, setUser],
   );
 
   return {
-    // 액션
     awardXP,
     updateStats,
-
-    // XP 토스트
     showXP,
     xpAmount,
     dismissXP: () => setShowXP(false),
-
-    // 레벨업 모달
     showLevelUp,
     levelUpInfo,
     dismissLevelUp: () => setShowLevelUp(false),
-
-    // 배지 모달
     showBadge,
     unlockedBadge,
     dismissBadge: () => setShowBadge(false),

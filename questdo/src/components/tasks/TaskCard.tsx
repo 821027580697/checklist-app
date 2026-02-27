@@ -42,7 +42,7 @@ export const TaskCard = ({
   const categoryLabel = CATEGORY_LABELS[task.category][language as 'ko' | 'en'];
 
   const formattedDueDate = task.dueDate
-    ? format(task.dueDate.toDate(), language === 'ko' ? 'M월 d일' : 'MMM d', {
+    ? format(new Date(task.dueDate), language === 'ko' ? 'M월 d일' : 'MMM d', {
         locale: language === 'ko' ? ko : enUS,
       })
     : null;

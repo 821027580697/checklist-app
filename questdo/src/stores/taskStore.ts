@@ -83,7 +83,7 @@ export const useTaskStore = create<TaskState>((set, get) => ({
       if (t.status === 'completed') return false;
       if (!t.dueDate) return false;
       try {
-        const dueDate = t.dueDate.toDate();
+        const dueDate = new Date(t.dueDate);
         return dueDate >= today && dueDate < tomorrow;
       } catch {
         return false;

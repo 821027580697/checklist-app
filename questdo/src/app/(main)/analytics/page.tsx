@@ -69,7 +69,7 @@ export default function AnalyticsPage() {
       const dayCompleted = tasks.filter((task) => {
         if (task.status !== 'completed' || !task.completedAt) return false;
         try {
-          const completedDate = task.completedAt.toDate();
+          const completedDate = new Date(task.completedAt);
           return completedDate >= date && completedDate < nextDate;
         } catch {
           return false;
@@ -79,7 +79,7 @@ export default function AnalyticsPage() {
       const dayTotal = tasks.filter((task) => {
         if (!task.dueDate) return false;
         try {
-          const dueDate = task.dueDate.toDate();
+          const dueDate = new Date(task.dueDate);
           return dueDate >= date && dueDate < nextDate;
         } catch {
           return false;
@@ -118,7 +118,7 @@ export default function AnalyticsPage() {
       const taskCount = tasks.filter((task) => {
         if (task.status !== 'completed' || !task.completedAt) return false;
         try {
-          const completedDate = task.completedAt.toDate();
+          const completedDate = new Date(task.completedAt);
           return completedDate >= date && completedDate < nextDate;
         } catch {
           return false;
@@ -175,7 +175,7 @@ export default function AnalyticsPage() {
     const thisWeekCompleted = tasks.filter((task) => {
       if (task.status !== 'completed' || !task.completedAt) return false;
       try {
-        const completedDate = task.completedAt.toDate();
+        const completedDate = new Date(task.completedAt);
         return completedDate >= weekStart;
       } catch {
         return false;

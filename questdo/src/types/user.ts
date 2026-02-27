@@ -1,33 +1,32 @@
 // 사용자 관련 타입 정의
-import { Timestamp } from 'firebase/firestore';
 
 // 사용자 프로필 인터페이스
 export interface User {
   uid: string;
   email: string;
   nickname: string;
-  avatarUrl: string;        // 기본 아바타 또는 커스텀 이미지
-  bio: string;              // 자기소개 (최대 150자)
-  level: number;            // 현재 레벨 (기본값: 1)
-  xp: number;               // 현재 경험치 (기본값: 0)
-  totalXp: number;          // 누적 총 경험치
-  title: string;            // 현재 칭호
+  avatarUrl: string;
+  bio: string;
+  level: number;
+  xp: number;
+  totalXp: number;
+  title: string;
   stats: UserStats;
-  badges: string[];         // 획득한 배지 ID 배열
+  badges: string[];
   settings: UserSettings;
   followersCount: number;
   followingCount: number;
-  createdAt: Timestamp;
-  updatedAt: Timestamp;
+  createdAt: string;  // ISO 문자열
+  updatedAt: string;
 }
 
 // 사용자 통계
 export interface UserStats {
-  totalCompleted: number;   // 총 완료한 할 일 수
-  currentStreak: number;    // 현재 연속 달성 일수
-  longestStreak: number;    // 최장 연속 달성 일수
-  totalHabitChecks: number; // 총 습관 체크 수
-  lastStreakDate: string;   // 마지막 스트릭 기록 날짜 (YYYY-MM-DD)
+  totalCompleted: number;
+  currentStreak: number;
+  longestStreak: number;
+  totalHabitChecks: number;
+  lastStreakDate: string;
 }
 
 // 사용자 설정

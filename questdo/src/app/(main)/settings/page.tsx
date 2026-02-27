@@ -1,4 +1,4 @@
-// 설정 페이지
+// 설정 페이지 — API 클라이언트 기반 (MongoDB + NextAuth)
 'use client';
 
 import { useRef, useState } from 'react';
@@ -21,9 +21,9 @@ import {
 import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import { signOut } from '@/lib/firebase/auth';
-import { updateDocument } from '@/lib/firebase/firestore';
-import { uploadAvatar } from '@/lib/firebase/storage';
+import { signOut as nextAuthSignOut } from 'next-auth/react';
+import { userApi } from '@/lib/api/client';
+import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
 import {
   User,
@@ -61,9 +61,7 @@ export default function SettingsPage() {
     if (!user) return;
     setIsSaving(true);
     try {
-      const { error } = await updateDocument('users', user.uid, { nickname, bio });
-      if (error) throw error;
-      // Zustand 스토어도 동기화
+      await userApi.update({ nickname, bio });
       setUser({ ...user, nickname, bio });
       toast.success(lang === 'ko' ? '프로필이 저장되었습니다' : 'Profile saved');
     } catch {
@@ -77,23 +75,34 @@ export default function SettingsPage() {
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error(lang === 'ko' ? 'JPG, PNG, WebP, GIF 형식만 가능합니다' : 'Only JPG, PNG, WebP, GIF allowed');
+
+    if (!file.type.startsWith('image/')) {
+      toast.error(lang === 'ko' ? '이미지 파일만 가능합니다' : 'Only image files allowed');
       return;
     }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error(lang === 'ko' ? '5MB 이하 파일만 가능합니다' : 'Max 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(lang === 'ko' ? '10MB 이하 파일만 가능합니다' : 'Max 10MB');
       return;
     }
+
     setIsUploading(true);
     try {
-      const { url, error } = await uploadAvatar(user.uid, file);
-      if (error) throw error;
-      if (!url) throw new Error('Upload failed');
-      const { error: updateError } = await updateDocument('users', user.uid, { avatarUrl: url });
-      if (updateError) throw updateError;
-      setUser({ ...user, avatarUrl: url });
+      const compressed = await imageCompression(file, {
+        maxWidthOrHeight: 200,
+        maxSizeMB: 0.1,
+        useWebWorker: true,
+        fileType: 'image/jpeg',
+      });
+
+      const reader = new FileReader();
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(compressed);
+      });
+
+      await userApi.update({ avatarUrl: dataUrl });
+      setUser({ ...user, avatarUrl: dataUrl });
       toast.success(lang === 'ko' ? '프로필 사진이 변경되었습니다' : 'Profile photo updated');
     } catch {
       toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다' : 'Failed to upload');
@@ -105,14 +114,13 @@ export default function SettingsPage() {
 
   // 로그아웃
   const handleLogout = async () => {
-    await signOut();
+    await nextAuthSignOut({ redirect: false });
     useAuthStore.getState().logout();
     router.replace('/login');
   };
 
   return (
     <div className="space-y-6">
-      {/* 페이지 헤더 */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -154,7 +162,7 @@ export default function SettingsPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/jpeg,image/png,image/webp,image/gif"
+                accept="image/*"
                 className="hidden"
                 onChange={handleAvatarUpload}
               />

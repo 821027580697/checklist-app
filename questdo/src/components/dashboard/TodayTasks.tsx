@@ -47,7 +47,7 @@ export const TodayTasks = ({ onToggleComplete, onEdit, onDelete }: TodayTasksPro
     // 마감일이 오늘인 것
     if (task.dueDate) {
       try {
-        if (isSameDay(task.dueDate.toDate(), today)) return true;
+        if (isSameDay(new Date(task.dueDate), today)) return true;
       } catch {
         // 파싱 실패 시 무시
       }
