@@ -1,4 +1,5 @@
 // 스트릭 체크 훅 — 날짜 기반 1일 1회 카운트 + 미완료 시 리셋 (MongoDB 기반)
+// 수정: 로컬 스트릭 상태를 즉시 반영하여 축하 메시지와 카운터가 정확하게 표시되도록 함
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
@@ -51,6 +52,11 @@ function getLocalStreakDate(): string {
   try { return localStorage.getItem(STREAK_DATE_KEY) || ''; } catch { return ''; }
 }
 
+function getLocalStreakCount(): number {
+  if (typeof window === 'undefined') return 0;
+  try { return parseInt(localStorage.getItem(STREAK_COUNT_KEY) || '0', 10); } catch { return 0; }
+}
+
 function setLocalStreakDate(date: string) {
   if (typeof window === 'undefined') return;
   try { localStorage.setItem(STREAK_DATE_KEY, date); } catch { /* ignore */ }
@@ -71,12 +77,41 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [cheerMessage, setCheerMessage] = useState('');
+  // 로컬 스트릭 카운터: UI에 즉시 반영하기 위한 상태
+  const [localStreak, setLocalStreak] = useState<number>(() => {
+    // 초기값: 로컬스토리지에 오늘 날짜가 있으면 로컬 카운트 사용
+    const savedDate = getLocalStreakDate();
+    const todayCheck = format(new Date(), 'yyyy-MM-dd');
+    if (savedDate === todayCheck) {
+      return getLocalStreakCount();
+    }
+    return 0;
+  });
   const isBusyRef = useRef(false);
   const alreadyIncrementedTodayRef = useRef(false);
 
   const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const today = useMemo(() => new Date(), []);
 
+  // 서버 데이터와 로컬 스트릭 동기화
+  useEffect(() => {
+    if (user?.stats?.currentStreak !== undefined) {
+      const serverStreak = user.stats.currentStreak;
+      const serverLastDate = user.stats.lastStreakDate || '';
+      // 서버에 오늘 날짜가 기록되어 있으면 서버 값 사용
+      if (serverLastDate === todayStr) {
+        setLocalStreak(serverStreak);
+        setLocalStreakCount(serverStreak);
+        setLocalStreakDate(todayStr);
+        alreadyIncrementedTodayRef.current = true;
+      } else if (!alreadyIncrementedTodayRef.current) {
+        // 아직 오늘 증가하지 않은 상태면 서버 값을 반영
+        setLocalStreak(serverStreak);
+      }
+    }
+  }, [user?.stats?.currentStreak, user?.stats?.lastStreakDate, todayStr]);
+
+  // 이미 오늘 증가했는지 체크
   useEffect(() => {
     const localLastDate = getLocalStreakDate();
     const serverLastDate = user?.stats?.lastStreakDate || '';
@@ -141,6 +176,9 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
       const localLastDate = getLocalStreakDate();
       if (serverLastStreakDate === todayStr || localLastDate === todayStr) {
         alreadyIncrementedTodayRef.current = true;
+        // 이미 오늘 처리됨: 서버 값으로 로컬 동기화
+        setLocalStreak(serverCurrentStreak);
+        setLocalStreakCount(serverCurrentStreak);
         return;
       }
 
@@ -150,19 +188,28 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
       const newStreak = isConsecutive ? serverCurrentStreak + 1 : 1;
       const newLongest = Math.max(newStreak, serverLongestStreak);
 
+      // ★ 핵심: 로컬 스트릭을 먼저 즉시 업데이트 → UI에 바로 반영
+      setLocalStreak(newStreak);
+      setLocalStreakDate(todayStr);
+      setLocalStreakCount(newStreak);
+
+      // 축하 메시지 표시
       const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
       setCheerMessage(messages[Math.floor(Math.random() * messages.length)]);
       setShowCelebration(true);
 
-      await userApi.update({
-        'stats.currentStreak': newStreak,
-        'stats.longestStreak': newLongest,
-        'stats.lastStreakDate': todayStr,
-      });
+      // 서버 업데이트 (비동기, UI 차단 없음)
+      try {
+        await userApi.update({
+          'stats.currentStreak': newStreak,
+          'stats.longestStreak': newLongest,
+          'stats.lastStreakDate': todayStr,
+        });
+      } catch (err) {
+        console.error('스트릭 서버 업데이트 실패:', err);
+      }
 
-      setLocalStreakDate(todayStr);
-      setLocalStreakCount(newStreak);
-
+      // 유저 상태 업데이트
       setUser({
         ...user,
         stats: { ...user.stats, currentStreak: newStreak, longestStreak: newLongest, lastStreakDate: todayStr },
@@ -181,11 +228,17 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     return () => clearTimeout(timer);
   }, [processStreak, user, isFetchedTasks, isFetchedHabits, bothComplete]);
 
-  // 오래된 스트릭 리셋
+  // 오래된 스트릭 리셋 (오늘 이미 증가했으면 리셋하지 않음)
   useEffect(() => {
     if (!user || !isFetchedTasks || !isFetchedHabits) return;
+    // 오늘 이미 증가했으면 리셋 로직 스킵
+    if (alreadyIncrementedTodayRef.current) return;
+
     const checkStaleStreak = async () => {
       if (isBusyRef.current) return;
+      // 다시 한번 체크 (비동기 타이밍 이슈 방지)
+      if (alreadyIncrementedTodayRef.current) return;
+
       const serverLastDate = user.stats?.lastStreakDate || '';
       if (!serverLastDate) return;
       const yesterdayStr = format(subDays(new Date(), 1), 'yyyy-MM-dd');
@@ -195,14 +248,15 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
           try {
             await userApi.update({ 'stats.currentStreak': 0 });
             setUser({ ...user, stats: { ...user.stats, currentStreak: 0 } });
+            setLocalStreak(0);
             setLocalStreakCount(0);
           } finally { isBusyRef.current = false; }
         }
       }
     };
-    const timer = setTimeout(checkStaleStreak, 500);
+    const timer = setTimeout(checkStaleStreak, 800);
     return () => clearTimeout(timer);
-  }, [user?.uid, isFetchedTasks, isFetchedHabits]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [user?.uid, isFetchedTasks, isFetchedHabits, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     tasksAllDone: todayTasksStatus.allDone,
@@ -210,6 +264,7 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     bothComplete,
     showCelebration,
     cheerMessage,
-    currentStreak: user?.stats?.currentStreak || 0,
+    // ★ 로컬 스트릭 사용 → 즉시 반영
+    currentStreak: localStreak,
   };
 };
