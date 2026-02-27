@@ -44,6 +44,71 @@ export interface TaskReminder {
   type: ReminderType;
 }
 
+// 재정/가계부 거래 유형
+export type TransactionType = 'income' | 'expense' | 'transfer';
+
+// 통화 코드
+export type CurrencyCode =
+  | 'KRW'
+  | 'USD'
+  | 'EUR'
+  | 'JPY'
+  | 'GBP'
+  | 'CNY'
+  | 'AUD'
+  | 'CAD'
+  | 'CHF'
+  | 'HKD'
+  | 'SGD'
+  | 'THB'
+  | 'VND';
+
+// 재정 데이터 인터페이스
+export interface FinanceData {
+  transactionType: TransactionType;      // 수입/지출/이체
+  amount: number;                         // 금액
+  currency: CurrencyCode;                // 통화
+  convertedAmount?: number;               // 환산 금액 (기준 통화)
+  convertedCurrency?: CurrencyCode;       // 환산 통화
+  exchangeRate?: number;                  // 적용 환율
+  paymentMethod?: string;                 // 결제 수단
+  merchant?: string;                      // 가맹점/상호
+}
+
+// 통화 라벨 (다국어)
+export const CURRENCY_LABELS: Record<CurrencyCode, { ko: string; en: string; symbol: string }> = {
+  KRW: { ko: '원 (KRW)', en: 'Won (KRW)', symbol: '₩' },
+  USD: { ko: '달러 (USD)', en: 'Dollar (USD)', symbol: '$' },
+  EUR: { ko: '유로 (EUR)', en: 'Euro (EUR)', symbol: '€' },
+  JPY: { ko: '엔 (JPY)', en: 'Yen (JPY)', symbol: '¥' },
+  GBP: { ko: '파운드 (GBP)', en: 'Pound (GBP)', symbol: '£' },
+  CNY: { ko: '위안 (CNY)', en: 'Yuan (CNY)', symbol: '¥' },
+  AUD: { ko: '호주 달러 (AUD)', en: 'AUD', symbol: 'A$' },
+  CAD: { ko: '캐나다 달러 (CAD)', en: 'CAD', symbol: 'C$' },
+  CHF: { ko: '스위스 프랑 (CHF)', en: 'CHF', symbol: 'CHF' },
+  HKD: { ko: '홍콩 달러 (HKD)', en: 'HKD', symbol: 'HK$' },
+  SGD: { ko: '싱가포르 달러 (SGD)', en: 'SGD', symbol: 'S$' },
+  THB: { ko: '태국 바트 (THB)', en: 'THB', symbol: '฿' },
+  VND: { ko: '베트남 동 (VND)', en: 'VND', symbol: '₫' },
+};
+
+// 거래 유형 라벨 (다국어)
+export const TRANSACTION_TYPE_LABELS: Record<TransactionType, { ko: string; en: string }> = {
+  income: { ko: '수입', en: 'Income' },
+  expense: { ko: '지출', en: 'Expense' },
+  transfer: { ko: '이체', en: 'Transfer' },
+};
+
+// 결제 수단 목록
+export const PAYMENT_METHODS = [
+  { value: 'cash', ko: '현금', en: 'Cash' },
+  { value: 'credit_card', ko: '신용카드', en: 'Credit Card' },
+  { value: 'debit_card', ko: '체크카드', en: 'Debit Card' },
+  { value: 'bank_transfer', ko: '계좌이체', en: 'Bank Transfer' },
+  { value: 'mobile_pay', ko: '모바일 결제', en: 'Mobile Pay' },
+  { value: 'other', ko: '기타', en: 'Other' },
+];
+
 // 할 일 메인 인터페이스
 export interface Task {
   id: string;
@@ -59,6 +124,7 @@ export interface Task {
   isRecurring: boolean;
   recurringPattern: RecurringPattern | null;
   subtasks: Subtask[];
+  financeData?: FinanceData;       // 재정/가계부 데이터 (카테고리가 finance일 때)
   xpEarned: number;             // 완료 시 획득한 XP
   completedAt: Timestamp | null;
   createdAt: Timestamp;

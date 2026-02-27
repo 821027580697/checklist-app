@@ -1,4 +1,4 @@
-// 할 일 + 습관 통합 페이지 — Apple 스타일 탭 UI
+// 할 일 + 습관 + 가계부 통합 페이지 — Apple 스타일 탭 UI
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -11,15 +11,16 @@ import { TaskForm } from '@/components/tasks/TaskForm';
 import { HabitCard } from '@/components/habits/HabitCard';
 import { HabitForm } from '@/components/habits/HabitForm';
 import { StreakCalendar } from '@/components/habits/StreakCalendar';
+import { FinanceSummary } from '@/components/finance/FinanceSummary';
 import { useTasks } from '@/hooks/useTasks';
 import { useHabits } from '@/hooks/useHabits';
 import { useTaskStore } from '@/stores/taskStore';
 import { useHabitStore } from '@/stores/habitStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Task, TaskCategory, TaskPriority } from '@/types/task';
+import { Task, TaskCategory, TaskPriority, FinanceData } from '@/types/task';
 import { HabitFrequencyType, Habit } from '@/types/habit';
 import { Timestamp } from 'firebase/firestore';
-import { Plus, CheckSquare, Repeat, Info, Hand } from 'lucide-react';
+import { Plus, CheckSquare, Repeat, Info, Hand, Wallet } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import {
@@ -30,7 +31,7 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog';
 
-type TabType = 'tasks' | 'habits';
+type TabType = 'tasks' | 'habits' | 'finance';
 
 export default function TasksHabitsPage() {
   const { t, language } = useTranslation();
@@ -47,21 +48,28 @@ export default function TasksHabitsPage() {
   const getActiveHabits = useHabitStore((state) => state.getActiveHabits);
   const activeHabits = getActiveHabits();
 
+  // Finance tasks
+  const allTasks = useTaskStore((state) => state.tasks);
+  const financeTaskCount = allTasks.filter((t) => t.category === 'finance' && t.financeData).length;
+
   // URL query params
   const searchParams = useSearchParams();
   const tabParam = searchParams.get('tab');
 
   // State
-  const [activeTab, setActiveTab] = useState<TabType>(tabParam === 'habits' ? 'habits' : 'tasks');
+  const [activeTab, setActiveTab] = useState<TabType>(
+    tabParam === 'habits' ? 'habits' : tabParam === 'finance' ? 'finance' : 'tasks',
+  );
 
   // URL 파라미터 변경 시 탭 동기화
   useEffect(() => {
-    if (tabParam === 'habits') {
-      setActiveTab('habits');
-    }
+    if (tabParam === 'habits') setActiveTab('habits');
+    else if (tabParam === 'finance') setActiveTab('finance');
   }, [tabParam]);
+
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showHabitForm, setShowHabitForm] = useState(false);
+  const [showFinanceForm, setShowFinanceForm] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
   const [deletingHabit, setDeletingHabit] = useState<Habit | null>(null);
@@ -87,6 +95,7 @@ export default function TasksHabitsPage() {
     dueTime: string;
     isRecurring: boolean;
     subtasks: { id: string; title: string; isCompleted: boolean }[];
+    financeData?: FinanceData;
   }) => {
     createTask({
       title: data.title,
@@ -100,6 +109,7 @@ export default function TasksHabitsPage() {
       isRecurring: data.isRecurring,
       recurringPattern: null,
       subtasks: data.subtasks,
+      financeData: data.financeData,
     });
   };
 
@@ -112,6 +122,7 @@ export default function TasksHabitsPage() {
     dueTime: string;
     isRecurring: boolean;
     subtasks: { id: string; title: string; isCompleted: boolean }[];
+    financeData?: FinanceData;
   }) => {
     if (!editingTask) return;
     editTask(editingTask.id, {
@@ -123,6 +134,7 @@ export default function TasksHabitsPage() {
       dueTime: data.dueTime || null,
       isRecurring: data.isRecurring,
       subtasks: data.subtasks,
+      financeData: data.financeData,
     });
     setEditingTask(null);
   };
@@ -164,6 +176,17 @@ export default function TasksHabitsPage() {
     }
   };
 
+  // 추가 버튼 핸들러
+  const handleAddClick = () => {
+    if (activeTab === 'tasks') {
+      setShowTaskForm(true);
+    } else if (activeTab === 'habits') {
+      setShowHabitForm(true);
+    } else if (activeTab === 'finance') {
+      setShowFinanceForm(true);
+    }
+  };
+
   const tabs: { key: TabType; label: string; icon: React.ReactNode; count: number }[] = [
     {
       key: 'tasks',
@@ -176,6 +199,12 @@ export default function TasksHabitsPage() {
       label: lang === 'ko' ? '습관' : 'Habits',
       icon: <Repeat className="h-4 w-4" />,
       count: activeHabits.length,
+    },
+    {
+      key: 'finance',
+      label: lang === 'ko' ? '가계부' : 'Finance',
+      icon: <Wallet className="h-4 w-4" />,
+      count: financeTaskCount,
     },
   ];
 
@@ -190,21 +219,29 @@ export default function TasksHabitsPage() {
       >
         <div>
           <h1 className="text-[28px] font-bold tracking-tight">
-            {lang === 'ko' ? '할 일 · 습관' : 'Tasks · Habits'}
+            {activeTab === 'finance'
+              ? lang === 'ko' ? '가계부' : 'Finance'
+              : lang === 'ko' ? '할 일 · 습관' : 'Tasks · Habits'}
           </h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {activeTab === 'tasks'
               ? `${filteredTasks.length} ${lang === 'ko' ? '개 할 일' : 'tasks'}`
-              : `${activeHabits.length} ${lang === 'ko' ? '개 습관' : 'habits'}`}
+              : activeTab === 'habits'
+                ? `${activeHabits.length} ${lang === 'ko' ? '개 습관' : 'habits'}`
+                : `${financeTaskCount} ${lang === 'ko' ? '건의 거래' : 'transactions'}`}
           </p>
         </div>
         <Button
-          onClick={() => activeTab === 'tasks' ? setShowTaskForm(true) : setShowHabitForm(true)}
+          onClick={handleAddClick}
           className="h-9 rounded-full px-4 text-[13px] font-medium"
           size="sm"
         >
           <Plus className="mr-1 h-4 w-4" />
-          {activeTab === 'tasks' ? t('tasks.add') : t('habits.add')}
+          {activeTab === 'tasks'
+            ? t('tasks.add')
+            : activeTab === 'habits'
+              ? t('habits.add')
+              : lang === 'ko' ? '거래 추가' : 'Add Transaction'}
         </Button>
       </motion.div>
 
@@ -220,7 +257,7 @@ export default function TasksHabitsPage() {
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'relative flex-1 flex items-center justify-center gap-2 rounded-lg py-2 text-[13px] font-medium transition-all duration-200',
+              'relative flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-medium transition-all duration-200',
               activeTab === tab.key
                 ? 'text-foreground'
                 : 'text-muted-foreground hover:text-foreground/70',
@@ -233,7 +270,7 @@ export default function TasksHabitsPage() {
                 transition={{ type: 'spring', stiffness: 500, damping: 35 }}
               />
             )}
-            <span className="relative z-10 flex items-center gap-2">
+            <span className="relative z-10 flex items-center gap-1.5">
               {tab.icon}
               {tab.label}
               <span className="inline-flex items-center justify-center h-5 min-w-5 px-1 rounded-full bg-primary/10 text-[10px] font-semibold text-primary">
@@ -270,7 +307,7 @@ export default function TasksHabitsPage() {
               </div>
             </div>
           </motion.div>
-        ) : (
+        ) : activeTab === 'habits' ? (
           <motion.div
             key="habits"
             initial={{ opacity: 0, x: 16 }}
@@ -373,6 +410,18 @@ export default function TasksHabitsPage() {
               </div>
             )}
           </motion.div>
+        ) : (
+          /* ======== 가계부 탭 ======== */
+          <motion.div
+            key="finance"
+            initial={{ opacity: 0, x: 16 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -16 }}
+            transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+            className="space-y-4"
+          >
+            <FinanceSummary />
+          </motion.div>
         )}
       </AnimatePresence>
 
@@ -381,6 +430,21 @@ export default function TasksHabitsPage() {
         open={showTaskForm}
         onClose={() => setShowTaskForm(false)}
         onSubmit={handleCreateTask}
+      />
+
+      {/* 가계부 거래 생성 모달 — 카테고리 기본값 finance */}
+      <TaskForm
+        open={showFinanceForm}
+        onClose={() => setShowFinanceForm(false)}
+        onSubmit={handleCreateTask}
+        initialData={{
+          category: 'finance',
+          financeData: {
+            transactionType: 'expense',
+            amount: 0,
+            currency: 'KRW',
+          },
+        }}
       />
 
       {/* 할 일 편집 모달 */}
@@ -400,6 +464,7 @@ export default function TasksHabitsPage() {
             dueTime: editingTask.dueTime || '',
             isRecurring: editingTask.isRecurring,
             subtasks: editingTask.subtasks,
+            financeData: editingTask.financeData,
           }}
           isEdit
         />
@@ -469,7 +534,7 @@ export default function TasksHabitsPage() {
 
       {/* 플로팅 추가 버튼 (모바일) */}
       <Button
-        onClick={() => activeTab === 'tasks' ? setShowTaskForm(true) : setShowHabitForm(true)}
+        onClick={handleAddClick}
         className="fixed bottom-24 right-5 h-[52px] w-[52px] rounded-full shadow-lg shadow-primary/30 md:hidden z-30"
         size="icon"
       >

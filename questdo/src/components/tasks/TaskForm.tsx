@@ -1,7 +1,8 @@
-// 할 일 생성/편집 폼 (모달)
+// 할 일 생성/편집 폼 (모달) — 재정 카테고리 선택 시 가계부 기능 포함
 'use client';
 
 import { useState, useEffect } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -21,9 +22,34 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useTranslation } from '@/hooks/useTranslation';
-import { TaskCategory, TaskPriority, CATEGORY_LABELS, PRIORITY_LABELS } from '@/types/task';
+import {
+  TaskCategory,
+  TaskPriority,
+  CATEGORY_LABELS,
+  PRIORITY_LABELS,
+  TransactionType,
+  CurrencyCode,
+  FinanceData,
+  CURRENCY_LABELS,
+  TRANSACTION_TYPE_LABELS,
+  PAYMENT_METHODS,
+} from '@/types/task';
 import { CATEGORY_ICONS } from '@/constants/categories';
-import { Plus, X } from 'lucide-react';
+import { formatCurrency } from '@/hooks/useExchangeRate';
+import { Calculator } from '@/components/finance/Calculator';
+import { ExchangeRateConverter } from '@/components/finance/ExchangeRateConverter';
+import {
+  Plus,
+  X,
+  Calculator as CalcIcon,
+  ArrowRightLeft,
+  TrendingUp,
+  TrendingDown,
+  ArrowLeftRight,
+  Wallet,
+  Store,
+  CreditCard,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface TaskFormData {
@@ -35,6 +61,7 @@ interface TaskFormData {
   dueTime: string;
   isRecurring: boolean;
   subtasks: { id: string; title: string; isCompleted: boolean }[];
+  financeData?: FinanceData;
 }
 
 interface TaskFormProps {
@@ -53,6 +80,7 @@ export const TaskForm = ({
   isEdit = false,
 }: TaskFormProps) => {
   const { t, language } = useTranslation();
+  const lang = language as 'ko' | 'en';
 
   const [formData, setFormData] = useState<TaskFormData>({
     title: initialData?.title || '',
@@ -63,9 +91,53 @@ export const TaskForm = ({
     dueTime: initialData?.dueTime || '',
     isRecurring: initialData?.isRecurring || false,
     subtasks: initialData?.subtasks || [],
+    financeData: initialData?.financeData || undefined,
   });
 
   const [newSubtask, setNewSubtask] = useState('');
+  const [showCalculator, setShowCalculator] = useState(false);
+  const [showExchangeRate, setShowExchangeRate] = useState(false);
+
+  // initialData 변경 시 폼 리셋
+  useEffect(() => {
+    if (open) {
+      setFormData({
+        title: initialData?.title || '',
+        description: initialData?.description || '',
+        category: initialData?.category || 'personal',
+        priority: initialData?.priority || 'medium',
+        dueDate: initialData?.dueDate || '',
+        dueTime: initialData?.dueTime || '',
+        isRecurring: initialData?.isRecurring || false,
+        subtasks: initialData?.subtasks || [],
+        financeData: initialData?.financeData || undefined,
+      });
+      setShowCalculator(false);
+      setShowExchangeRate(false);
+    }
+  }, [open, initialData]);
+
+  // 카테고리가 finance로 변경되면 기본 financeData 생성
+  useEffect(() => {
+    if (formData.category === 'finance' && !formData.financeData) {
+      setFormData((prev) => ({
+        ...prev,
+        financeData: {
+          transactionType: 'expense',
+          amount: 0,
+          currency: 'KRW',
+        },
+      }));
+    }
+    if (formData.category !== 'finance') {
+      setFormData((prev) => ({
+        ...prev,
+        financeData: undefined,
+      }));
+      setShowCalculator(false);
+      setShowExchangeRate(false);
+    }
+  }, [formData.category]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 서브태스크 추가
   const addSubtask = () => {
@@ -88,6 +160,14 @@ export const TaskForm = ({
     }));
   };
 
+  // 재정 데이터 업데이트 헬퍼
+  const updateFinanceData = (updates: Partial<FinanceData>) => {
+    setFormData((prev) => ({
+      ...prev,
+      financeData: prev.financeData ? { ...prev.financeData, ...updates } : undefined,
+    }));
+  };
+
   // 폼 제출
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -96,7 +176,19 @@ export const TaskForm = ({
     onClose();
   };
 
-  const lang = language as 'ko' | 'en';
+  const isFinanceCategory = formData.category === 'finance';
+
+  const transactionTypeIcons: Record<TransactionType, React.ReactNode> = {
+    income: <TrendingUp className="h-4 w-4" />,
+    expense: <TrendingDown className="h-4 w-4" />,
+    transfer: <ArrowLeftRight className="h-4 w-4" />,
+  };
+
+  const transactionTypeColors: Record<TransactionType, string> = {
+    income: '#34C759',
+    expense: '#FF3B30',
+    transfer: '#007AFF',
+  };
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -115,7 +207,11 @@ export const TaskForm = ({
               id="title"
               value={formData.title}
               onChange={(e) => setFormData((prev) => ({ ...prev, title: e.target.value }))}
-              placeholder={t('tasks.titlePlaceholder')}
+              placeholder={
+                isFinanceCategory
+                  ? lang === 'ko' ? '지출/수입 내역을 입력하세요' : 'Enter transaction description'
+                  : t('tasks.titlePlaceholder')
+              }
               maxLength={100}
               className="rounded-xl"
               autoFocus
@@ -181,6 +277,203 @@ export const TaskForm = ({
               </Select>
             </div>
           </div>
+
+          {/* ======== 재정/가계부 섹션 ======== */}
+          <AnimatePresence>
+            {isFinanceCategory && formData.financeData && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+                className="space-y-4 overflow-hidden"
+              >
+                {/* 재정 섹션 헤더 */}
+                <div className="flex items-center gap-2 pt-2">
+                  <Wallet className="h-4 w-4 text-[#AF52DE]" />
+                  <span className="text-[13px] font-semibold text-[#AF52DE]">
+                    {lang === 'ko' ? '가계부 정보' : 'Finance Details'}
+                  </span>
+                </div>
+
+                {/* 거래 유형 선택 — 세그먼트 컨트롤 */}
+                <div className="space-y-2">
+                  <Label className="text-[12px]">
+                    {lang === 'ko' ? '거래 유형' : 'Transaction Type'}
+                  </Label>
+                  <div className="flex rounded-xl bg-secondary/60 p-1 gap-1">
+                    {(Object.keys(TRANSACTION_TYPE_LABELS) as TransactionType[]).map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => updateFinanceData({ transactionType: type })}
+                        className={cn(
+                          'relative flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-[12px] font-medium transition-all duration-200',
+                          formData.financeData?.transactionType === type
+                            ? 'text-white shadow-sm'
+                            : 'text-muted-foreground hover:text-foreground/70',
+                        )}
+                        style={{
+                          backgroundColor:
+                            formData.financeData?.transactionType === type
+                              ? transactionTypeColors[type]
+                              : 'transparent',
+                        }}
+                      >
+                        {transactionTypeIcons[type]}
+                        {TRANSACTION_TYPE_LABELS[type][lang]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 금액 & 통화 */}
+                <div className="space-y-2">
+                  <Label className="text-[12px]">
+                    {lang === 'ko' ? '금액' : 'Amount'}
+                  </Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        type="number"
+                        value={formData.financeData.amount || ''}
+                        onChange={(e) =>
+                          updateFinanceData({ amount: parseFloat(e.target.value) || 0 })
+                        }
+                        placeholder="0"
+                        className="rounded-xl pr-10 text-[16px] font-medium"
+                        min="0"
+                        step="any"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 rounded-lg"
+                        onClick={() => setShowCalculator(!showCalculator)}
+                        title={lang === 'ko' ? '계산기' : 'Calculator'}
+                      >
+                        <CalcIcon className="h-3.5 w-3.5 text-[#FF9500]" />
+                      </Button>
+                    </div>
+                    <Select
+                      value={formData.financeData.currency}
+                      onValueChange={(v) => updateFinanceData({ currency: v as CurrencyCode })}
+                    >
+                      <SelectTrigger className="rounded-xl w-[120px]">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.keys(CURRENCY_LABELS) as CurrencyCode[]).map((c) => (
+                          <SelectItem key={c} value={c}>
+                            {CURRENCY_LABELS[c].symbol} {c}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* 금액 미리보기 */}
+                  {formData.financeData.amount > 0 && (
+                    <p
+                      className="text-[13px] font-medium px-1"
+                      style={{ color: transactionTypeColors[formData.financeData.transactionType] }}
+                    >
+                      {formData.financeData.transactionType === 'income' ? '+' : formData.financeData.transactionType === 'expense' ? '-' : ''}
+                      {formatCurrency(formData.financeData.amount, formData.financeData.currency)}
+                    </p>
+                  )}
+                </div>
+
+                {/* 계산기 (토글) */}
+                <AnimatePresence>
+                  {showCalculator && (
+                    <Calculator
+                      initialValue={formData.financeData.amount}
+                      onResult={(value) => updateFinanceData({ amount: value })}
+                      onClose={() => setShowCalculator(false)}
+                    />
+                  )}
+                </AnimatePresence>
+
+                {/* 결제 수단 & 가맹점 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label className="text-[12px] flex items-center gap-1.5">
+                      <CreditCard className="h-3 w-3 text-muted-foreground" />
+                      {lang === 'ko' ? '결제 수단' : 'Payment'}
+                    </Label>
+                    <Select
+                      value={formData.financeData.paymentMethod || ''}
+                      onValueChange={(v) => updateFinanceData({ paymentMethod: v })}
+                    >
+                      <SelectTrigger className="rounded-xl text-[12px]">
+                        <SelectValue placeholder={lang === 'ko' ? '선택' : 'Select'} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {PAYMENT_METHODS.map((m) => (
+                          <SelectItem key={m.value} value={m.value}>
+                            {m[lang]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="text-[12px] flex items-center gap-1.5">
+                      <Store className="h-3 w-3 text-muted-foreground" />
+                      {lang === 'ko' ? '가맹점/메모' : 'Merchant'}
+                    </Label>
+                    <Input
+                      value={formData.financeData.merchant || ''}
+                      onChange={(e) => updateFinanceData({ merchant: e.target.value })}
+                      placeholder={lang === 'ko' ? '가맹점명' : 'Name'}
+                      className="rounded-xl text-[12px]"
+                      maxLength={50}
+                    />
+                  </div>
+                </div>
+
+                {/* 환율 변환 토글 버튼 */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full rounded-xl text-[12px] h-9 border-dashed"
+                  onClick={() => setShowExchangeRate(!showExchangeRate)}
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5 mr-2 text-[#007AFF]" />
+                  {showExchangeRate
+                    ? lang === 'ko' ? '환율 변환기 닫기' : 'Close Exchange Rate'
+                    : lang === 'ko' ? '환율 변환기 열기' : 'Open Exchange Rate'}
+                </Button>
+
+                {/* 환율 변환기 (토글) */}
+                <AnimatePresence>
+                  {showExchangeRate && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                    >
+                      <ExchangeRateConverter
+                        initialAmount={formData.financeData.amount}
+                        initialFrom={formData.financeData.currency}
+                        initialTo={formData.financeData.currency === 'KRW' ? 'USD' : 'KRW'}
+                        onConvert={(result) => {
+                          updateFinanceData({
+                            convertedAmount: result.convertedAmount,
+                            convertedCurrency: result.to,
+                            exchangeRate: result.rate,
+                          });
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* 마감일 & 시간 */}
           <div className="grid grid-cols-2 gap-4">

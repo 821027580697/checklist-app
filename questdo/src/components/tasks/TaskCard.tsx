@@ -6,9 +6,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Task, PRIORITY_COLORS, CATEGORY_LABELS } from '@/types/task';
+import { Task, PRIORITY_COLORS, CATEGORY_LABELS, TRANSACTION_TYPE_LABELS, TransactionType } from '@/types/task';
+import { formatCurrency } from '@/hooks/useExchangeRate';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Calendar, Clock, MoreHorizontal, ChevronRight } from 'lucide-react';
+import { Calendar, Clock, MoreHorizontal, ChevronRight, TrendingUp, TrendingDown, ArrowLeftRight } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -138,6 +139,31 @@ export const TaskCard = ({
           {task.subtasks.length > 0 && (
             <span className="text-[11px] text-muted-foreground">
               · {subtaskProgress}/{task.subtasks.length}
+            </span>
+          )}
+
+          {/* 재정 금액 표시 */}
+          {task.financeData && (
+            <span
+              className="flex items-center gap-0.5 text-[11px] font-semibold ml-auto"
+              style={{
+                color:
+                  task.financeData.transactionType === 'income'
+                    ? '#34C759'
+                    : task.financeData.transactionType === 'expense'
+                      ? '#FF3B30'
+                      : '#007AFF',
+              }}
+            >
+              {task.financeData.transactionType === 'income' ? (
+                <TrendingUp className="h-3 w-3" />
+              ) : task.financeData.transactionType === 'expense' ? (
+                <TrendingDown className="h-3 w-3" />
+              ) : (
+                <ArrowLeftRight className="h-3 w-3" />
+              )}
+              {task.financeData.transactionType === 'income' ? '+' : task.financeData.transactionType === 'expense' ? '-' : ''}
+              {formatCurrency(task.financeData.amount, task.financeData.currency)}
             </span>
           )}
         </div>

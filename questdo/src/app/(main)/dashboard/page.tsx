@@ -14,10 +14,10 @@ import { useTasks } from '@/hooks/useTasks';
 import { useHabits } from '@/hooks/useHabits';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Task, TaskCategory, TaskPriority } from '@/types/task';
+import { Task, TaskCategory, TaskPriority, FinanceData } from '@/types/task';
 import { HabitFrequencyType } from '@/types/habit';
 import { Timestamp } from 'firebase/firestore';
-import { Plus, CheckSquare, Repeat } from 'lucide-react';
+import { Plus, CheckSquare, Repeat, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
@@ -56,6 +56,7 @@ export default function DashboardPage() {
     dueTime: string;
     isRecurring: boolean;
     subtasks: { id: string; title: string; isCompleted: boolean }[];
+    financeData?: FinanceData;
   }) => {
     if (!editingTask) return;
     editTask(editingTask.id, {
@@ -67,6 +68,7 @@ export default function DashboardPage() {
       dueTime: data.dueTime || null,
       isRecurring: data.isRecurring,
       subtasks: data.subtasks,
+      financeData: data.financeData,
     });
     setEditingTask(null);
   };
@@ -173,6 +175,21 @@ export default function DashboardPage() {
             </div>
           </div>
         </Link>
+        <Link href="/tasks?tab=finance" className="flex-1">
+          <div className="apple-card p-4 flex items-center gap-3 hover:bg-secondary/30 transition-colors cursor-pointer group">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#AF52DE]/10 text-[#AF52DE]">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-semibold tracking-tight group-hover:text-[#AF52DE] transition-colors">
+                {lang === 'ko' ? '가계부' : 'Finance'}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {lang === 'ko' ? '수입, 지출, 환율' : 'Income, expense, rates'}
+              </p>
+            </div>
+          </div>
+        </Link>
       </motion.div>
 
       {/* 할 일 편집 모달 */}
@@ -192,6 +209,7 @@ export default function DashboardPage() {
             dueTime: editingTask.dueTime || '',
             isRecurring: editingTask.isRecurring,
             subtasks: editingTask.subtasks,
+            financeData: editingTask.financeData,
           }}
           isEdit
         />
