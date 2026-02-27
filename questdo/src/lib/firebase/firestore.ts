@@ -113,19 +113,27 @@ export const subscribeToCollection = (
   collectionName: string,
   constraints: QueryConstraint[],
   callback: (docs: DocumentData[]) => void,
+  onError?: (error: Error) => void,
 ): Unsubscribe => {
   if (!db) {
     // Firestore not initialized
     return () => {};
   }
   const q = query(collection(db, collectionName), ...constraints);
-  return onSnapshot(q, (snapshot) => {
-    const docs = snapshot.docs.map((d) => ({
-      id: d.id,
-      ...d.data(),
-    }));
-    callback(docs);
-  });
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const docs = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...d.data(),
+      }));
+      callback(docs);
+    },
+    (error) => {
+      console.error(`Firestore listener error (${collectionName}):`, error);
+      onError?.(error);
+    },
+  );
 };
 
 // 배치 업데이트 (여러 문서 동시 업데이트)

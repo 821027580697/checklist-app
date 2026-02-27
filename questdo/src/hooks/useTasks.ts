@@ -1,4 +1,4 @@
-// 할 일 CRUD 훅 — Firestore 쿼리 안정화
+// 할 일 CRUD 훅 — Firestore 실시간 리스너 기반
 'use client';
 
 import { useEffect, useCallback } from 'react';
@@ -9,11 +9,11 @@ import {
   createDocument,
   updateDocument,
   deleteDocument,
-  getDocuments,
+  subscribeToCollection,
   where,
 } from '@/lib/firebase/firestore';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, DocumentData } from 'firebase/firestore';
 import { toast } from 'sonner';
 
 export const useTasks = () => {
@@ -25,46 +25,7 @@ export const useTasks = () => {
   const updateTask = useTaskStore((s) => s.updateTask);
   const removeTask = useTaskStore((s) => s.removeTask);
   const setLoading = useTaskStore((s) => s.setLoading);
-  const setFetched = useTaskStore((s) => s.setFetched);
   const user = useAuthStore((s) => s.user);
-
-  // 할 일 목록 불러오기 (중복 방지)
-  const fetchTasks = useCallback(async (force = false) => {
-    if (!user || !isFirebaseConfigured) return;
-    if (isLoading) return; // 이미 요청 중
-    if (isFetched && !force) return; // 이미 로드 완료
-
-    setLoading(true);
-    try {
-      const { data, error } = await getDocuments('tasks', [
-        where('userId', '==', user.uid),
-      ]);
-
-      if (error) {
-        const errMsg = (error as Error)?.message || '';
-        if (errMsg.includes('permission') || errMsg.includes('PERMISSION_DENIED')) {
-          setTasks([]);
-          return;
-        }
-        throw error;
-      }
-
-      // 클라이언트 정렬 (Firestore 복합 인덱스 불필요)
-      const sorted = (data as Task[]).sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-      setTasks(sorted);
-    } catch (error) {
-      console.error('할 일 목록 불러오기 실패:', error);
-      if (!isFetched) {
-        setTasks([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [user, isLoading, isFetched, setTasks, setLoading]);
 
   // 할 일 생성
   const createTask = useCallback(
@@ -79,6 +40,7 @@ export const useTasks = () => {
         });
         if (error) throw error;
         if (id) {
+          // 낙관적 업데이트 — 실시간 리스너가 곧 최종 데이터를 가져옴
           const newTask = {
             ...taskData,
             id,
@@ -107,7 +69,6 @@ export const useTasks = () => {
         updateTask(taskId, data); // UI 먼저 반영
         const { error } = await updateDocument('tasks', taskId, data);
         if (error) {
-          // 실패 시 되돌리기
           if (previousTask) {
             updateTask(taskId, previousTask);
           }
@@ -153,15 +114,32 @@ export const useTasks = () => {
     [tasks, removeTask, addTask],
   );
 
-  // 초기 로드 (user 변경 시)
+  // Firestore 실시간 리스너로 연동
   useEffect(() => {
-    if (user) {
-      if (!isFetched) {
-        fetchTasks();
-      }
-    } else {
+    if (!user || !isFirebaseConfigured) {
       useTaskStore.getState().reset();
+      return;
     }
+
+    setLoading(true);
+
+    const unsubscribe = subscribeToCollection(
+      'tasks',
+      [where('userId', '==', user.uid)],
+      (docs: DocumentData[]) => {
+        const sorted = (docs as Task[]).sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        setTasks(sorted);
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
@@ -171,6 +149,5 @@ export const useTasks = () => {
     editTask,
     toggleComplete,
     deleteTask,
-    fetchTasks: () => fetchTasks(true),
   };
 };

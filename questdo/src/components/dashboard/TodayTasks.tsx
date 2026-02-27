@@ -1,4 +1,4 @@
-// 오늘의 할 일 위젯 — 완전 CRUD 지원
+// 오늘의 할 일 위젯 — 실시간 연동 + CRUD 지원
 'use client';
 
 import { useState } from 'react';
@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useTaskStore } from '@/stores/taskStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Task, PRIORITY_COLORS, CATEGORY_LABELS } from '@/types/task';
-import { CheckCircle2, CalendarPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
+import { CheckCircle2, CalendarPlus, MoreHorizontal, Pencil, Trash2, Inbox } from 'lucide-react';
 import Link from 'next/link';
 import { isSameDay } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -42,14 +42,19 @@ export const TodayTasks = ({ onToggleComplete, onEdit, onDelete }: TodayTasksPro
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  // 오늘 마감인 모든 할 일 (완료 포함)
+  // 오늘 마감인 할 일 + 마감일 없는 미완료 할 일 (전체 연동)
   const allTodayTasks = tasks.filter((task) => {
-    if (!task.dueDate) return false;
-    try {
-      return isSameDay(task.dueDate.toDate(), today);
-    } catch {
-      return false;
+    // 마감일이 오늘인 것
+    if (task.dueDate) {
+      try {
+        if (isSameDay(task.dueDate.toDate(), today)) return true;
+      } catch {
+        // 파싱 실패 시 무시
+      }
     }
+    // 마감일 없는 미완료 할 일도 오늘 목록에 포함
+    if (!task.dueDate && task.status !== 'completed') return true;
+    return false;
   });
 
   // 미완료 먼저, 완료 뒤에
@@ -128,6 +133,7 @@ export const TodayTasks = ({ onToggleComplete, onEdit, onDelete }: TodayTasksPro
               {sortedTasks.map((task) => {
                 const isCompleted = task.status === 'completed';
                 const priorityColor = PRIORITY_COLORS[task.priority];
+                const hasNoDueDate = !task.dueDate;
 
                 return (
                   <motion.div
@@ -164,6 +170,12 @@ export const TodayTasks = ({ onToggleComplete, onEdit, onDelete }: TodayTasksPro
                         <span className="text-[10px] text-muted-foreground">
                           {CATEGORY_LABELS[task.category]?.[lang]}
                         </span>
+                        {hasNoDueDate && (
+                          <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground/50">
+                            <Inbox className="h-2.5 w-2.5" />
+                            {lang === 'ko' ? '미지정' : 'No date'}
+                          </span>
+                        )}
                       </div>
                     </div>
 

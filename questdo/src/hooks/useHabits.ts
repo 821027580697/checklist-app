@@ -1,4 +1,4 @@
-// 습관 CRUD 훅 — Firestore 쿼리 안정화
+// 습관 CRUD 훅 — Firestore 실시간 리스너 기반
 'use client';
 
 import { useEffect, useCallback } from 'react';
@@ -9,61 +9,23 @@ import {
   createDocument,
   updateDocument,
   deleteDocument,
-  getDocuments,
+  subscribeToCollection,
   where,
 } from '@/lib/firebase/firestore';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, DocumentData } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
 
 export const useHabits = () => {
   const habits = useHabitStore((s) => s.habits);
   const isLoading = useHabitStore((s) => s.isLoading);
-  const isFetched = useHabitStore((s) => s.isFetched);
   const setHabits = useHabitStore((s) => s.setHabits);
   const addHabit = useHabitStore((s) => s.addHabit);
   const updateHabit = useHabitStore((s) => s.updateHabit);
   const removeHabit = useHabitStore((s) => s.removeHabit);
   const setLoading = useHabitStore((s) => s.setLoading);
   const user = useAuthStore((s) => s.user);
-
-  // 습관 목록 불러오기 (중복 방지)
-  const fetchHabits = useCallback(async (force = false) => {
-    if (!user || !isFirebaseConfigured) return;
-    if (isLoading) return;
-    if (isFetched && !force) return;
-
-    setLoading(true);
-    try {
-      const { data, error } = await getDocuments('habits', [
-        where('userId', '==', user.uid),
-      ]);
-
-      if (error) {
-        const errMsg = (error as Error)?.message || '';
-        if (errMsg.includes('permission') || errMsg.includes('PERMISSION_DENIED')) {
-          setHabits([]);
-          return;
-        }
-        throw error;
-      }
-
-      const sorted = (data as Habit[]).sort((a, b) => {
-        const aTime = a.createdAt?.toMillis?.() || 0;
-        const bTime = b.createdAt?.toMillis?.() || 0;
-        return bTime - aTime;
-      });
-      setHabits(sorted);
-    } catch (error) {
-      console.error('습관 목록 불러오기 실패:', error);
-      if (!isFetched) {
-        setHabits([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [user, isLoading, isFetched, setHabits, setLoading]);
 
   // 습관 생성
   const createHabit = useCallback(
@@ -131,7 +93,6 @@ export const useHabits = () => {
       try {
         const { error } = await updateDocument('habits', habit.id, data);
         if (error) {
-          // 실패 시 되돌리기
           updateHabit(habit.id, {
             completedDates: currentDates,
             totalChecks: habit.totalChecks,
@@ -172,15 +133,32 @@ export const useHabits = () => {
     [habits, removeHabit, addHabit],
   );
 
-  // 초기 로드
+  // Firestore 실시간 리스너로 연동
   useEffect(() => {
-    if (user) {
-      if (!isFetched) {
-        fetchHabits();
-      }
-    } else {
+    if (!user || !isFirebaseConfigured) {
       useHabitStore.getState().reset();
+      return;
     }
+
+    setLoading(true);
+
+    const unsubscribe = subscribeToCollection(
+      'habits',
+      [where('userId', '==', user.uid)],
+      (docs: DocumentData[]) => {
+        const sorted = (docs as Habit[]).sort((a, b) => {
+          const aTime = a.createdAt?.toMillis?.() || 0;
+          const bTime = b.createdAt?.toMillis?.() || 0;
+          return bTime - aTime;
+        });
+        setHabits(sorted);
+        setLoading(false);
+      },
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [user?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
@@ -189,6 +167,5 @@ export const useHabits = () => {
     createHabit,
     toggleTodayCheck,
     deleteHabit,
-    fetchHabits: () => fetchHabits(true),
   };
 };
