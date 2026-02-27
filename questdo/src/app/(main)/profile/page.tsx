@@ -49,31 +49,25 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // 파일 형식 검증 (넓은 범위 허용)
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
-    if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/')) {
+    // 파일 형식 검증
+    if (!file.type.startsWith('image/')) {
       toast.error(lang === 'ko' ? '이미지 파일만 업로드 가능합니다' : 'Only image files allowed');
       return;
     }
 
-    // 파일 크기 검증 (5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error(lang === 'ko' ? '파일 크기는 5MB 이하여야 합니다' : 'File must be under 5MB');
+    // 파일 크기 검증 (10MB — 내부적으로 압축됨)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(lang === 'ko' ? '파일 크기는 10MB 이하여야 합니다' : 'File must be under 10MB');
       return;
     }
 
     setIsUploading(true);
+    toast.info(lang === 'ko' ? '사진을 처리하고 있습니다...' : 'Processing photo...');
+
     try {
-      // 이미지 업로드 (내부적으로 압축 처리)
+      // 이미지 업로드 (Storage 또는 base64 fallback 자동 처리)
       const { url, error } = await uploadAvatar(user.uid, file);
-      if (error) {
-        const errMsg = error.message || '';
-        // Firebase Storage 규칙 에러 구분
-        if (errMsg.includes('storage/unauthorized') || errMsg.includes('does not have permission')) {
-          throw new Error(lang === 'ko' ? 'Storage 권한이 없습니다. 관리자에게 문의하세요.' : 'Storage permission denied.');
-        }
-        throw error;
-      }
+      if (error) throw error;
       if (!url) throw new Error('Upload failed - no URL returned');
 
       // Firestore 업데이트
@@ -87,22 +81,17 @@ export default function ProfilePage() {
       toast.success(lang === 'ko' ? '프로필 사진이 변경되었습니다 ✅' : 'Profile photo updated ✅');
     } catch (err) {
       console.error('Failed to upload avatar:', err);
-      const errMessage = err instanceof Error ? err.message : '';
-      if (errMessage.includes('Storage not initialized')) {
-        toast.error(lang === 'ko' ? 'Storage가 초기화되지 않았습니다' : 'Storage not initialized');
-      } else {
-        toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다. 다시 시도해주세요.' : 'Failed to upload. Please try again.');
-      }
+      toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다. 다시 시도해주세요.' : 'Failed to upload. Please try again.');
     } finally {
       setIsUploading(false);
-      // 파일 input 리셋
+      // 파일 input 리셋 (같은 파일 재선택 가능)
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     }
   };
 
-  const hasPhotoUrl = user.avatarUrl?.startsWith('http');
+  const hasPhotoUrl = user.avatarUrl?.startsWith('http') || user.avatarUrl?.startsWith('data:');
 
   return (
     <div className="space-y-6">
@@ -148,7 +137,7 @@ export default function ProfilePage() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp,image/gif"
+                  accept="image/*"
                   className="hidden"
                   onChange={handleFileChange}
                 />

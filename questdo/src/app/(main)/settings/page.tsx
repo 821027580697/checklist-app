@@ -138,7 +138,7 @@ export default function SettingsPage() {
               >
                 {isUploading ? (
                   <Loader2 className="h-6 w-6 text-white animate-spin" />
-                ) : user?.avatarUrl?.startsWith('http') ? (
+                ) : (user?.avatarUrl?.startsWith('http') || user?.avatarUrl?.startsWith('data:')) ? (
                   <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
                   <span className="text-white font-bold">{user?.nickname?.charAt(0) || '?'}</span>

@@ -428,7 +428,7 @@ export default function FeedPage() {
         {/* 포스트 헤더 */}
         <div className="flex items-center gap-3 mb-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-lg shrink-0 overflow-hidden">
-            {post.userAvatar?.startsWith('http') ? (
+            {(post.userAvatar?.startsWith('http') || post.userAvatar?.startsWith('data:')) ? (
               <img src={post.userAvatar} alt="" className="h-full w-full object-cover" />
             ) : (
               post.userAvatar || '?'
@@ -546,7 +546,7 @@ export default function FeedPage() {
                   comments.map((comment) => (
                     <div key={comment.id} className="flex items-start gap-2">
                       <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF]/30 to-[#5856D6]/30 text-[10px] overflow-hidden">
-                        {comment.userAvatar?.startsWith('http') ? (
+                        {(comment.userAvatar?.startsWith('http') || comment.userAvatar?.startsWith('data:')) ? (
                           <img src={comment.userAvatar} alt="" className="h-full w-full object-cover" />
                         ) : (
                           comment.userAvatar || '?'
@@ -765,7 +765,7 @@ export default function FeedPage() {
                       className="flex items-center gap-3 rounded-xl p-3 hover:bg-secondary/50 transition-all"
                     >
                       <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-lg shrink-0 overflow-hidden">
-                        {result.avatarUrl?.startsWith('http') ? (
+                        {(result.avatarUrl?.startsWith('http') || result.avatarUrl?.startsWith('data:')) ? (
                           <img src={result.avatarUrl} alt="" className="h-full w-full object-cover" />
                         ) : (
                           result.nickname?.charAt(0) || '?'
@@ -816,7 +816,7 @@ export default function FeedPage() {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-sm overflow-hidden">
-                {user?.avatarUrl?.startsWith('http') ? (
+                {(user?.avatarUrl?.startsWith('http') || user?.avatarUrl?.startsWith('data:')) ? (
                   <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
                 ) : (
                   user?.nickname?.charAt(0) || '?'
