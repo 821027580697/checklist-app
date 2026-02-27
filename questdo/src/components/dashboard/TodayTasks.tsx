@@ -1,25 +1,43 @@
-// 오늘의 할 일 위젯
+// 오늘의 할 일 위젯 — 완전 CRUD 지원
 'use client';
 
-import { motion } from 'framer-motion';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
-import { TaskList } from '@/components/tasks/TaskList';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useTaskStore } from '@/stores/taskStore';
 import { useTranslation } from '@/hooks/useTranslation';
-import { Task } from '@/types/task';
-import { CheckCircle2, CalendarPlus } from 'lucide-react';
+import { Task, PRIORITY_COLORS, CATEGORY_LABELS } from '@/types/task';
+import { CheckCircle2, CalendarPlus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { isSameDay } from 'date-fns';
+import { cn } from '@/lib/utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 
 interface TodayTasksProps {
   onToggleComplete: (task: Task) => void;
+  onEdit?: (task: Task) => void;
+  onDelete?: (taskId: string) => void;
 }
 
-export const TodayTasks = ({ onToggleComplete }: TodayTasksProps) => {
+export const TodayTasks = ({ onToggleComplete, onEdit, onDelete }: TodayTasksProps) => {
   const { t, language } = useTranslation();
   const lang = language as 'ko' | 'en';
   const tasks = useTaskStore((state) => state.tasks);
   const isLoading = useTaskStore((state) => state.isLoading);
+  const [deletingTask, setDeletingTask] = useState<Task | null>(null);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -34,25 +52,23 @@ export const TodayTasks = ({ onToggleComplete }: TodayTasksProps) => {
     }
   });
 
-  // 표시용: 미완료 + 오늘 완료된 것
-  const displayTasks = allTodayTasks
-    .filter((task) => {
-      if (task.status !== 'completed') return true;
-      // 완료된 것은 오늘 완료된 것만 표시
-      if (task.completedAt) {
-        try {
-          return isSameDay(task.completedAt.toDate(), today);
-        } catch {
-          return false;
-        }
-      }
-      return false;
-    })
-    .slice(0, 5);
+  // 미완료 먼저, 완료 뒤에
+  const sortedTasks = [...allTodayTasks].sort((a, b) => {
+    if (a.status === 'completed' && b.status !== 'completed') return 1;
+    if (a.status !== 'completed' && b.status === 'completed') return -1;
+    return 0;
+  });
 
   const completedCount = allTodayTasks.filter((t) => t.status === 'completed').length;
   const totalCount = allTodayTasks.length;
   const allCompleted = totalCount > 0 && completedCount === totalCount;
+
+  const handleDelete = () => {
+    if (deletingTask && onDelete) {
+      onDelete(deletingTask.id);
+      setDeletingTask(null);
+    }
+  };
 
   return (
     <div className="apple-card overflow-hidden">
@@ -77,7 +93,6 @@ export const TodayTasks = ({ onToggleComplete }: TodayTasksProps) => {
             <div className="h-6 w-6 animate-spin rounded-full border-[2px] border-primary/20 border-t-primary" />
           </div>
         ) : totalCount === 0 ? (
-          /* 오늘 등록된 할 일이 없는 경우 */
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -94,11 +109,10 @@ export const TodayTasks = ({ onToggleComplete }: TodayTasksProps) => {
             </Link>
           </motion.div>
         ) : allCompleted ? (
-          /* 오늘의 할 일을 모두 완료한 경우 */
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="flex flex-col items-center py-8 text-center"
+            className="flex flex-col items-center py-6 text-center"
           >
             <CheckCircle2 className="h-8 w-8 text-[#34C759] mb-2" />
             <p className="text-[13px] font-medium text-[#34C759]">
@@ -109,13 +123,105 @@ export const TodayTasks = ({ onToggleComplete }: TodayTasksProps) => {
             </p>
           </motion.div>
         ) : (
-          <TaskList
-            tasks={displayTasks}
-            onToggleComplete={onToggleComplete}
-            compact
-          />
+          <div className="space-y-1">
+            <AnimatePresence mode="popLayout">
+              {sortedTasks.map((task) => {
+                const isCompleted = task.status === 'completed';
+                const priorityColor = PRIORITY_COLORS[task.priority];
+
+                return (
+                  <motion.div
+                    key={task.id}
+                    layout
+                    initial={{ opacity: 0, y: 4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className={cn(
+                      'group flex items-center gap-3 rounded-xl p-2.5 transition-all duration-200 hover:bg-secondary/50',
+                      isCompleted && 'opacity-50',
+                    )}
+                  >
+                    {/* 체크박스 */}
+                    <Checkbox
+                      checked={isCompleted}
+                      onCheckedChange={() => onToggleComplete(task)}
+                      className={cn(
+                        'h-[18px] w-[18px] rounded-full border-[1.5px] transition-all shrink-0',
+                        isCompleted && 'bg-[#34C759] border-[#34C759]',
+                      )}
+                    />
+
+                    {/* 콘텐츠 */}
+                    <div className="flex-1 min-w-0">
+                      <p className={cn(
+                        'text-[13px] font-medium leading-tight truncate',
+                        isCompleted && 'line-through text-muted-foreground',
+                      )}>
+                        {task.title}
+                      </p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{ backgroundColor: priorityColor }} />
+                        <span className="text-[10px] text-muted-foreground">
+                          {CATEGORY_LABELS[task.category]?.[lang]}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 더보기 메뉴 */}
+                    {(onEdit || onDelete) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-md opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="rounded-xl min-w-[120px]">
+                          {onEdit && (
+                            <DropdownMenuItem onClick={() => onEdit(task)} className="text-[13px] gap-2">
+                              <Pencil className="h-3.5 w-3.5" />
+                              {t('common.edit')}
+                            </DropdownMenuItem>
+                          )}
+                          {onDelete && (
+                            <DropdownMenuItem onClick={() => setDeletingTask(task)} className="text-[13px] text-[#FF3B30] gap-2">
+                              <Trash2 className="h-3.5 w-3.5" />
+                              {t('common.delete')}
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
         )}
       </div>
+
+      {/* 삭제 확인 모달 */}
+      <Dialog open={!!deletingTask} onOpenChange={() => setDeletingTask(null)}>
+        <DialogContent className="sm:max-w-[340px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-[17px] text-center">{t('tasks.deleteConfirm')}</DialogTitle>
+            <DialogDescription className="text-[13px] text-center">
+              &quot;{deletingTask?.title}&quot;
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex gap-3 mt-2">
+            <Button variant="outline" className="flex-1 h-10 rounded-xl text-[14px]" onClick={() => setDeletingTask(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="destructive" className="flex-1 h-10 rounded-xl text-[14px]" onClick={handleDelete}>
+              {t('common.delete')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
