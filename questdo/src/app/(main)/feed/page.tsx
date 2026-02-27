@@ -540,6 +540,7 @@ export default function FeedPage() {
                     className="flex-1 h-9 rounded-full text-[13px] bg-secondary dark:bg-[#2C2C2E] border-0"
                     maxLength={200}
                     onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault();
                         handleAddComment(post.id);
@@ -699,6 +700,7 @@ export default function FeedPage() {
                 placeholder={lang === 'ko' ? '닉네임으로 검색...' : 'Search by nickname...'}
                 className="flex-1 h-10 rounded-xl text-[14px]"
                 onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (e.key === 'Enter') handleSearch();
                 }}
               />

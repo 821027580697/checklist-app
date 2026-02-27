@@ -29,10 +29,12 @@ import {
   PRIORITY_LABELS,
   TransactionType,
   CurrencyCode,
+  ExpenseCategory,
   FinanceData,
   CURRENCY_LABELS,
   TRANSACTION_TYPE_LABELS,
   PAYMENT_METHODS,
+  EXPENSE_CATEGORY_LABELS,
 } from '@/types/task';
 import { CATEGORY_ICONS } from '@/constants/categories';
 import { formatCurrency } from '@/hooks/useExchangeRate';
@@ -52,6 +54,8 @@ import {
   Store,
   CreditCard,
   Receipt,
+  Tag,
+  FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -490,6 +494,55 @@ export const TaskForm = ({
                   </div>
                 </div>
 
+                {/* 지출 카테고리 */}
+                <div className="space-y-2">
+                  <Label className="text-[12px] flex items-center gap-1.5">
+                    <Tag className="h-3 w-3 text-muted-foreground" />
+                    {lang === 'ko' ? '지출 카테고리' : 'Expense Category'}
+                  </Label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {(Object.keys(EXPENSE_CATEGORY_LABELS) as ExpenseCategory[])
+                      .filter((cat) => {
+                        // 수입일 때는 급여/저축만, 지출일 때는 급여 제외
+                        if (formData.financeData?.transactionType === 'income') {
+                          return cat === 'salary' || cat === 'savings' || cat === 'other_expense';
+                        }
+                        return cat !== 'salary';
+                      })
+                      .map((cat) => (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => updateFinanceData({ expenseCategory: cat })}
+                          className={cn(
+                            'flex flex-col items-center gap-0.5 rounded-lg py-2 px-1 text-[10px] transition-all duration-150 border',
+                            formData.financeData?.expenseCategory === cat
+                              ? 'border-[#AF52DE] bg-[#AF52DE]/10 text-[#AF52DE] font-medium'
+                              : 'border-transparent bg-secondary/40 text-muted-foreground hover:bg-secondary/70',
+                          )}
+                        >
+                          <span className="text-[14px]">{EXPENSE_CATEGORY_LABELS[cat].emoji}</span>
+                          <span className="truncate w-full text-center">{EXPENSE_CATEGORY_LABELS[cat][lang]}</span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+
+                {/* 메모 */}
+                <div className="space-y-2">
+                  <Label className="text-[12px] flex items-center gap-1.5">
+                    <FileText className="h-3 w-3 text-muted-foreground" />
+                    {lang === 'ko' ? '메모' : 'Memo'}
+                  </Label>
+                  <Input
+                    value={formData.financeData.memo || ''}
+                    onChange={(e) => updateFinanceData({ memo: e.target.value })}
+                    placeholder={lang === 'ko' ? '추가 메모 (선택)' : 'Additional note (optional)'}
+                    className="rounded-xl text-[12px]"
+                    maxLength={100}
+                  />
+                </div>
+
                 {/* 영수증 이미지 미리보기 */}
                 {formData.financeData.receiptImageUrl && (
                   <div className="space-y-1.5">
@@ -624,6 +677,8 @@ export const TaskForm = ({
                 placeholder={t('tasks.addSubtask')}
                 className="rounded-xl"
                 onKeyDown={(e) => {
+                  // 한글 IME 조합 중이면 무시 (마지막 글자 중복 방지)
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                   if (e.key === 'Enter') {
                     e.preventDefault();
                     addSubtask();

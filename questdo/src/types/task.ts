@@ -63,16 +63,33 @@ export type CurrencyCode =
   | 'THB'
   | 'VND';
 
+// 지출 카테고리
+export type ExpenseCategory =
+  | 'food'        // 식비
+  | 'transport'   // 교통비
+  | 'shopping'    // 쇼핑
+  | 'housing'     // 주거/생활
+  | 'medical'     // 의료/건강
+  | 'education'   // 교육
+  | 'entertainment' // 여가/문화
+  | 'communication' // 통신
+  | 'insurance'   // 보험
+  | 'savings'     // 저축/투자
+  | 'salary'      // 급여 (수입)
+  | 'other_expense'; // 기타
+
 // 재정 데이터 인터페이스
 export interface FinanceData {
   transactionType: TransactionType;      // 수입/지출/이체
   amount: number;                         // 금액
   currency: CurrencyCode;                // 통화
+  expenseCategory?: ExpenseCategory;     // 지출 카테고리
   convertedAmount?: number;               // 환산 금액 (기준 통화)
   convertedCurrency?: CurrencyCode;       // 환산 통화
   exchangeRate?: number;                  // 적용 환율
   paymentMethod?: string;                 // 결제 수단
   merchant?: string;                      // 가맹점/상호
+  memo?: string;                          // 메모
   receiptImageUrl?: string;              // 영수증 이미지 URL
 }
 
@@ -109,6 +126,22 @@ export const PAYMENT_METHODS = [
   { value: 'mobile_pay', ko: '모바일 결제', en: 'Mobile Pay' },
   { value: 'other', ko: '기타', en: 'Other' },
 ];
+
+// 지출 카테고리 라벨 (다국어)
+export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, { ko: string; en: string; emoji: string }> = {
+  food: { ko: '식비', en: 'Food', emoji: '🍽️' },
+  transport: { ko: '교통', en: 'Transport', emoji: '🚗' },
+  shopping: { ko: '쇼핑', en: 'Shopping', emoji: '🛍️' },
+  housing: { ko: '주거/생활', en: 'Housing', emoji: '🏠' },
+  medical: { ko: '의료/건강', en: 'Medical', emoji: '🏥' },
+  education: { ko: '교육', en: 'Education', emoji: '📚' },
+  entertainment: { ko: '여가/문화', en: 'Leisure', emoji: '🎬' },
+  communication: { ko: '통신', en: 'Telecom', emoji: '📱' },
+  insurance: { ko: '보험', en: 'Insurance', emoji: '🛡️' },
+  savings: { ko: '저축/투자', en: 'Savings', emoji: '💰' },
+  salary: { ko: '급여', en: 'Salary', emoji: '💵' },
+  other_expense: { ko: '기타', en: 'Other', emoji: '📋' },
+};
 
 // 할 일 메인 인터페이스
 export interface Task {

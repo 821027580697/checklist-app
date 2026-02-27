@@ -319,6 +319,32 @@ export const ReceiptScanner = ({ onResult, onClose }: ReceiptScannerProps) => {
                     </div>
                   </div>
 
+                  {/* 인식된 항목들 */}
+                  {result.items && result.items.length > 0 && (
+                    <details className="group" open>
+                      <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors flex items-center gap-1">
+                        <span>
+                          {lang === 'ko'
+                            ? `인식된 항목 (${result.items.length}건)`
+                            : `Items (${result.items.length})`}
+                        </span>
+                      </summary>
+                      <div className="mt-2 rounded-lg bg-secondary/20 divide-y divide-border/20 overflow-hidden">
+                        {result.items.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between px-3 py-1.5 text-[11px]">
+                            <span className="flex-1 truncate">
+                              {item.name}
+                              {item.quantity > 1 && <span className="text-muted-foreground ml-1">×{item.quantity}</span>}
+                            </span>
+                            <span className="font-medium ml-2 shrink-0">
+                              {formatCurrency(item.price, result.currency)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
+
                   {/* OCR 원본 텍스트 (접기/펼치기) */}
                   <details className="group">
                     <summary className="text-[11px] text-muted-foreground cursor-pointer hover:text-foreground transition-colors flex items-center gap-1">

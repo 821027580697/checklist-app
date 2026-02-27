@@ -1,13 +1,14 @@
 // 스트릭 체크 훅 — 날짜 기반 1일 1회 카운트 + 미완료 시 리셋
+// ✅ 고도화: localStorage 백업, 엄격한 중복 방지, 마운트 시 재실행 방지
 'use client';
 
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { useTaskStore } from '@/stores/taskStore';
 import { useHabitStore } from '@/stores/habitStore';
 import { useAuthStore } from '@/stores/authStore';
-import { updateDocument } from '@/lib/firebase/firestore';
+import { updateDocument, getDocument } from '@/lib/firebase/firestore';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { isSameDay, format, subDays, parseISO } from 'date-fns';
+import { isSameDay, format, subDays } from 'date-fns';
 
 // 응원 메시지
 const CHEER_MESSAGES_KO = [
@@ -45,6 +46,40 @@ export interface StreakCheckResult {
   currentStreak: number;
 }
 
+// localStorage 키
+const STREAK_DATE_KEY = 'questdo_last_streak_date';
+const STREAK_COUNT_KEY = 'questdo_current_streak';
+
+// 로컬 스토리지에서 마지막 스트릭 날짜 읽기
+function getLocalStreakDate(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return localStorage.getItem(STREAK_DATE_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+// 로컬 스토리지에 스트릭 날짜 저장
+function setLocalStreakDate(date: string) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STREAK_DATE_KEY, date);
+  } catch {
+    // 무시
+  }
+}
+
+// 로컬 스토리지에 스트릭 카운트 저장
+function setLocalStreakCount(count: number) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STREAK_COUNT_KEY, String(count));
+  } catch {
+    // 무시
+  }
+}
+
 export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
   const tasks = useTaskStore((s) => s.tasks);
   const isFetchedTasks = useTaskStore((s) => s.isFetched);
@@ -55,10 +90,11 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [cheerMessage, setCheerMessage] = useState('');
-  const processingRef = useRef(false);
+  const hasProcessedRef = useRef(false); // 이 마운트에서 이미 처리했는지
+  const isBusyRef = useRef(false); // 비동기 처리 중인지
 
+  const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const today = useMemo(() => new Date(), []);
-  const todayStr = format(today, 'yyyy-MM-dd');
 
   // 오늘 할 일 완료 여부
   const todayTasksStatus = useMemo(() => {
@@ -106,7 +142,7 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     };
   }, [habits, isFetchedHabits, today, todayStr]);
 
-  // 할 일 OR 습관 중 하나라도 있고, 있는 것 모두 100% 완료되었을 때 bothComplete
+  // 할 일 OR 습관 중 하나라도 있고, 있는 것 모두 100% 완료
   const bothComplete = useMemo(() => {
     const hasTasks = todayTasksStatus.total > 0;
     const hasHabits = todayHabitsStatus.total > 0;
@@ -120,80 +156,127 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
   }, [todayTasksStatus, todayHabitsStatus]);
 
   const currentStreak = user?.stats?.currentStreak || 0;
-  const lastStreakDate = user?.stats?.lastStreakDate || '';
 
-  // 스트릭 업데이트 — 날짜 기반 1일 1회만, 어제 미달성 시 리셋
-  useEffect(() => {
+  // 스트릭 업데이트 함수
+  const processStreak = useCallback(async () => {
     if (!user || !isFirebaseConfigured) return;
     if (!isFetchedTasks || !isFetchedHabits) return;
-    if (processingRef.current) return;
+    if (hasProcessedRef.current || isBusyRef.current) return;
 
-    // ── 1) 어제 미달성 시 스트릭 리셋 체크 ──
-    const yesterdayStr = format(subDays(today, 1), 'yyyy-MM-dd');
+    isBusyRef.current = true;
 
-    // lastStreakDate가 어제보다 이전이면 (어제 달성하지 못했으면) 스트릭 리셋
-    if (lastStreakDate && lastStreakDate !== todayStr && lastStreakDate !== yesterdayStr) {
-      // 어제도, 오늘도 아닌 이전 날짜 → 중간에 빠진 날이 있으므로 리셋
-      if (currentStreak > 0) {
-        processingRef.current = true;
-        updateDocument('users', user.uid, {
-          'stats.currentStreak': 0,
+    try {
+      // Firestore에서 최신 사용자 데이터 읽기 (로컬 상태가 오래될 수 있으므로)
+      let serverLastStreakDate = user.stats?.lastStreakDate || '';
+      let serverCurrentStreak = user.stats?.currentStreak || 0;
+      let serverLongestStreak = user.stats?.longestStreak || 0;
+
+      try {
+        const { data: freshUser } = await getDocument('users', user.uid);
+        if (freshUser) {
+          const freshStats = (freshUser as Record<string, unknown>).stats as Record<string, unknown> | undefined;
+          if (freshStats) {
+            serverLastStreakDate = (freshStats.lastStreakDate as string) || '';
+            serverCurrentStreak = (freshStats.currentStreak as number) || 0;
+            serverLongestStreak = (freshStats.longestStreak as number) || 0;
+          }
+        }
+      } catch {
+        // Firestore 읽기 실패 시 로컬 데이터 사용
+      }
+
+      // localStorage도 확인 (이중 안전장치)
+      const localLastDate = getLocalStreakDate();
+
+      // 오늘 이미 처리했으면 스킵
+      if (serverLastStreakDate === todayStr || localLastDate === todayStr) {
+        hasProcessedRef.current = true;
+        return;
+      }
+
+      const yesterdayStr = format(subDays(today, 1), 'yyyy-MM-dd');
+
+      // 어제보다 이전이면 스트릭 리셋
+      if (serverLastStreakDate && serverLastStreakDate !== yesterdayStr && serverLastStreakDate !== todayStr) {
+        if (serverCurrentStreak > 0) {
+          await updateDocument('users', user.uid, {
+            'stats.currentStreak': 0,
+          });
+          setUser({
+            ...user,
+            stats: {
+              ...user.stats,
+              currentStreak: 0,
+            },
+          });
+          setLocalStreakCount(0);
+          // 리셋 후 100% 완료라면 새로 +1 처리
+          serverCurrentStreak = 0;
+        }
+      }
+
+      // 오늘 100% 완료 시 +1
+      if (bothComplete) {
+        hasProcessedRef.current = true;
+
+        // 응원 메시지
+        const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
+        const msg = messages[Math.floor(Math.random() * messages.length)];
+        setCheerMessage(msg);
+        setShowCelebration(true);
+
+        // 어제가 마지막이면 연속, 아니면 1부터
+        const isConsecutive = serverLastStreakDate === yesterdayStr || serverLastStreakDate === '';
+        const newStreak = isConsecutive ? serverCurrentStreak + 1 : 1;
+        const newLongest = Math.max(newStreak, serverLongestStreak);
+
+        // Firestore 업데이트
+        await updateDocument('users', user.uid, {
+          'stats.currentStreak': newStreak,
+          'stats.longestStreak': newLongest,
+          'stats.lastStreakDate': todayStr,
         });
+
+        // localStorage에도 저장 (이중 안전장치)
+        setLocalStreakDate(todayStr);
+        setLocalStreakCount(newStreak);
+
+        // 로컬 상태 업데이트
         setUser({
           ...user,
           stats: {
             ...user.stats,
-            currentStreak: 0,
+            currentStreak: newStreak,
+            longestStreak: newLongest,
+            lastStreakDate: todayStr,
           },
         });
-        processingRef.current = false;
-        return;
+
+        // 축하 애니메이션 타이머
+        setTimeout(() => {
+          setShowCelebration(false);
+        }, 4000);
+      } else {
+        hasProcessedRef.current = true;
       }
+    } finally {
+      isBusyRef.current = false;
     }
+  }, [user, isFetchedTasks, isFetchedHabits, bothComplete, todayStr, today, lang, setUser]);
 
-    // ── 2) 오늘 이미 카운트했으면 스킵 ──
-    if (lastStreakDate === todayStr) return;
+  // 스트릭 체크 실행 — 데이터가 준비되고 완료 상태가 변경될 때만
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured) return;
+    if (!isFetchedTasks || !isFetchedHabits) return;
+    if (hasProcessedRef.current) return;
 
-    // ── 3) 오늘 100% 완료 시 +1 ──
-    if (bothComplete) {
-      processingRef.current = true;
+    // 데이터가 모두 로드된 후 약간의 지연을 두고 실행 (데이터 안정화 대기)
+    const timer = setTimeout(() => {
+      processStreak();
+    }, 500);
 
-      // 응원 메시지 선택
-      const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
-      const msg = messages[Math.floor(Math.random() * messages.length)];
-      setCheerMessage(msg);
-      setShowCelebration(true);
-
-      // 스트릭 +1 (어제가 마지막 날짜이면 연속, 아니면 1부터 시작)
-      const isConsecutive = lastStreakDate === yesterdayStr || lastStreakDate === '';
-      const newStreak = isConsecutive ? currentStreak + 1 : 1;
-      const newLongest = Math.max(newStreak, user.stats?.longestStreak || 0);
-
-      // Firestore 업데이트 (lastStreakDate로 중복 방지)
-      updateDocument('users', user.uid, {
-        'stats.currentStreak': newStreak,
-        'stats.longestStreak': newLongest,
-        'stats.lastStreakDate': todayStr,
-      });
-
-      // 로컬 상태 업데이트
-      setUser({
-        ...user,
-        stats: {
-          ...user.stats,
-          currentStreak: newStreak,
-          longestStreak: newLongest,
-          lastStreakDate: todayStr,
-        },
-      });
-
-      // 축하 애니메이션 타이머
-      setTimeout(() => {
-        setShowCelebration(false);
-        processingRef.current = false;
-      }, 4000);
-    }
-  }, [bothComplete, user?.uid, isFetchedTasks, isFetchedHabits, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
+    return () => clearTimeout(timer);
+  }, [processStreak, user, isFetchedTasks, isFetchedHabits]);
 
   return {
     tasksAllDone: todayTasksStatus.allDone,
