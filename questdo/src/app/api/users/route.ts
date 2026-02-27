@@ -43,7 +43,42 @@ export async function PUT(req: NextRequest) {
     updateData[key] = value;
   }
 
-  const updated = await UserModel.findByIdAndUpdate(user.uid, { $set: updateData }, { new: true }).lean();
-  if (!updated) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+  // upsert: 사용자가 아직 DB에 없으면 자동 생성 (온보딩 시)
+  const updated = await UserModel.findByIdAndUpdate(
+    user.uid,
+    {
+      $set: updateData,
+      $setOnInsert: {
+        _id: user.uid,
+        email: user.email || '',
+        nickname: updateData.nickname || user.name || 'User',
+        avatarUrl: updateData.avatarUrl || user.image || '',
+        bio: '',
+        level: 1,
+        xp: 0,
+        totalXp: 0,
+        title: '초보 모험가',
+        stats: {
+          totalCompleted: 0,
+          currentStreak: 0,
+          longestStreak: 0,
+          totalHabitChecks: 0,
+          lastStreakDate: '',
+        },
+        badges: [],
+        settings: {
+          theme: 'system',
+          language: 'ko',
+          notifications: { taskReminder: true, habitReminder: true, socialActivity: true, achievements: true },
+          privacy: { profilePublic: true, showStreak: true, showLevel: true },
+        },
+        followersCount: 0,
+        followingCount: 0,
+      },
+    },
+    { new: true, upsert: true },
+  ).lean();
+
+  if (!updated) return NextResponse.json({ error: 'Failed to update user' }, { status: 500 });
   return NextResponse.json({ ...updated, uid: updated._id.toString() });
 }

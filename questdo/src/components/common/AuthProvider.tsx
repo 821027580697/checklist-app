@@ -33,16 +33,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       userApi.me()
         .then((data) => {
-          setNeedsOnboarding(false);
-          setUser(data as unknown as User);
+          // 닉네임이 Google 기본값이면 온보딩 필요
+          const nickname = (data as Record<string, unknown>).nickname as string;
+          const googleName = session.user?.name;
+          if (!nickname || nickname === googleName || nickname === (session.user?.email as string)?.split('@')[0]) {
+            setNeedsOnboarding(true);
+            setUser(null);
+          } else {
+            setNeedsOnboarding(false);
+            setUser(data as unknown as User);
+          }
         })
         .catch(() => {
           // 유저 문서가 없으면 온보딩 필요
           setNeedsOnboarding(true);
           setUser(null);
-          setLoading(false);
         })
         .finally(() => {
+          setLoading(false);
           processingRef.current = false;
         });
     }

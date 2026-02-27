@@ -39,29 +39,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider === 'google' && user.id) {
         try {
           await dbConnect();
-          const existingUser = await UserModel.findById(user.id);
-          if (!existingUser) {
-            // 신규 사용자 — DB에 생성
-            await UserModel.create({
-              _id: user.id,
-              email: user.email || '',
-              nickname: user.name || user.email?.split('@')[0] || 'User',
-              avatarUrl: user.image || '',
-              bio: '',
-              level: 1,
-              xp: 0,
-              totalXp: 0,
-              title: '초보 모험가',
-              stats: DEFAULT_USER_STATS,
-              badges: [],
-              settings: DEFAULT_USER_SETTINGS,
-              followersCount: 0,
-              followingCount: 0,
-            });
-          }
+          // upsert: 없으면 생성, 있으면 아바타만 갱신
+          await UserModel.findByIdAndUpdate(
+            user.id,
+            {
+              $set: { avatarUrl: user.image || '' },
+              $setOnInsert: {
+                _id: user.id,
+                email: user.email || '',
+                nickname: user.name || user.email?.split('@')[0] || 'User',
+                bio: '',
+                level: 1,
+                xp: 0,
+                totalXp: 0,
+                title: '초보 모험가',
+                stats: DEFAULT_USER_STATS,
+                badges: [],
+                settings: DEFAULT_USER_SETTINGS,
+                followersCount: 0,
+                followingCount: 0,
+              },
+            },
+            { upsert: true, new: true },
+          );
         } catch (err) {
           console.error('SignIn DB error:', err);
-          // DB 에러가 나도 로그인 자체는 허용
+          // DB 에러가 나도 로그인 자체는 허용 — 온보딩 시 upsert로 재생성
         }
       }
       return true;
