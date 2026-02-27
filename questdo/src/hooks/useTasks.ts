@@ -26,6 +26,7 @@ export const useTasks = () => {
   const removeTask = useTaskStore((s) => s.removeTask);
   const setLoading = useTaskStore((s) => s.setLoading);
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
 
   // 할 일 생성
   const createTask = useCallback(
@@ -82,14 +83,67 @@ export const useTasks = () => {
     [tasks, updateTask],
   );
 
-  // 할 일 완료 토글
+  // 할 일 완료 토글 + XP ± 처리
   const toggleComplete = useCallback(
     async (task: Task) => {
       const newStatus = task.status === 'completed' ? 'todo' : 'completed';
       const completedAt = newStatus === 'completed' ? Timestamp.now() : null;
+      const xpAmount = 10; // 기본 할 일 완료 XP
+
       await editTask(task.id, { status: newStatus, completedAt });
+
+      // XP 업데이트
+      if (user) {
+        try {
+          if (newStatus === 'completed') {
+            // 완료: XP 추가
+            const newTotalXp = (user.totalXp || 0) + xpAmount;
+            const newXp = (user.xp || 0) + xpAmount;
+            const newTotalCompleted = (user.stats?.totalCompleted || 0) + 1;
+
+            await updateDocument('users', user.uid, {
+              totalXp: newTotalXp,
+              xp: newXp,
+              'stats.totalCompleted': newTotalCompleted,
+            });
+
+            setUser({
+              ...user,
+              totalXp: newTotalXp,
+              xp: newXp,
+              stats: {
+                ...user.stats,
+                totalCompleted: newTotalCompleted,
+              },
+            });
+          } else {
+            // 미완료로 되돌림: XP 차감
+            const newTotalXp = Math.max(0, (user.totalXp || 0) - xpAmount);
+            const newXp = Math.max(0, (user.xp || 0) - xpAmount);
+            const newTotalCompleted = Math.max(0, (user.stats?.totalCompleted || 0) - 1);
+
+            await updateDocument('users', user.uid, {
+              totalXp: newTotalXp,
+              xp: newXp,
+              'stats.totalCompleted': newTotalCompleted,
+            });
+
+            setUser({
+              ...user,
+              totalXp: newTotalXp,
+              xp: newXp,
+              stats: {
+                ...user.stats,
+                totalCompleted: newTotalCompleted,
+              },
+            });
+          }
+        } catch (err) {
+          console.error('XP 업데이트 실패:', err);
+        }
+      }
     },
-    [editTask],
+    [editTask, user, setUser],
   );
 
   // 할 일 삭제 (낙관적 삭제)

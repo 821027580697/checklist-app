@@ -14,6 +14,7 @@ export interface ReceiptData {
   date: string;           // 거래 날짜 (yyyy-MM-dd)
   transactionType: TransactionType;
   paymentMethod: string;
+  expenseCategory: string; // 자동 분류된 지출 카테고리
   rawText: string;        // 원본 OCR 텍스트
   confidence: number;     // 인식 신뢰도 (0~100)
   items: ReceiptItem[];   // 개별 항목들
@@ -314,14 +315,18 @@ function parseReceipt(rawText: string, confidence: number): ReceiptData {
   const amount = extractAmount(lines, cleanedText);
   const items = extractItems(lines);
 
+  const detectedTransactionType = detectTransactionType(cleanedText, merchant, amount);
+  const detectedCategory = detectExpenseCategory(cleanedText, merchant, items);
+
   return {
     title: merchant || extractTitle(lines),
     amount,
     currency: detectCurrency(cleanedText),
     merchant,
     date: extractDate(cleanedText),
-    transactionType: 'expense',
+    transactionType: detectedTransactionType,
     paymentMethod: detectPaymentMethod(cleanedText),
+    expenseCategory: detectedCategory,
     rawText: cleanedText,
     confidence,
     items,
@@ -633,6 +638,70 @@ function detectCurrency(rawText: string): CurrencyCode {
   // 한국어 텍스트가 있으면 KRW
   if (/[가-힣]/.test(rawText)) return 'KRW';
   return 'KRW';
+}
+
+// 수입/지출 자동 감지
+function detectTransactionType(rawText: string, merchant: string, amount: number): TransactionType {
+  const text = (rawText + ' ' + merchant).toLowerCase();
+
+  // 수입 키워드
+  const incomeKeywords = /급여|월급|salary|wage|보너스|bonus|이자|interest|배당|dividend|환급|refund|입금|deposit|수입|income|송금\s*받|received|정산금|용돈|상여/i;
+  if (incomeKeywords.test(text)) return 'income';
+
+  // 이체 키워드
+  const transferKeywords = /이체|transfer|송금|remit|출금|withdraw/i;
+  if (transferKeywords.test(text)) return 'transfer';
+
+  // 기본적으로 영수증은 지출
+  return 'expense';
+}
+
+// 지출 카테고리 자동 분류 — 가맹점명 + 항목 분석
+function detectExpenseCategory(rawText: string, merchant: string, items: ReceiptItem[]): string {
+  const text = (rawText + ' ' + merchant + ' ' + items.map(i => i.name).join(' ')).toLowerCase();
+
+  // 식비 (food)
+  const foodKeywords = /식당|레스토랑|restaurant|카페|cafe|coffee|커피|베이커리|bakery|빵|치킨|chicken|피자|pizza|버거|burger|맥도날드|mcdonald|스타벅스|starbucks|이디야|ediya|투썸|twosome|배달|delivery|떡볶이|김밥|편의점|convenience|cu\b|gs25|세븐일레븐|7-?eleven|이마트|emart|홈플러스|homeplus|롯데마트|음식|food|meal|lunch|dinner|breakfast|반찬|마트|mart|grocery|supermarket|고기|meat|생선|fish|야채|vegetable|과일|fruit|음료|drink|beverage|주류|alcohol|술|맥주|beer|소주|와인|wine|디저트|dessert|케이크|cake|아이스크림|ice\s*cream|라면|noodle|밥|rice|국|soup|찌개|요기요|배민|baemin|쿠팡이츠|coupang/i;
+  if (foodKeywords.test(text)) return 'food';
+
+  // 교통 (transport)
+  const transportKeywords = /주유소|gas\s*station|fuel|휘발유|경유|diesel|택시|taxi|uber|카카오택시|버스|bus|지하철|subway|metro|기차|train|ktx|srt|항공|airline|비행기|flight|주차|parking|톨게이트|toll|하이패스|고속도로|highway|교통|transport|카카오모빌리티|네이버지도|tmap/i;
+  if (transportKeywords.test(text)) return 'transport';
+
+  // 쇼핑 (shopping)
+  const shoppingKeywords = /쇼핑|shopping|의류|clothing|옷|fashion|패션|신발|shoes|가방|bag|백화점|department|올리브영|olive\s*young|다이소|daiso|아울렛|outlet|온라인\s*쇼핑|쿠팡|coupang|11번가|g마켓|gmarket|위메프|인터파크|네이버\s*쇼핑|amazon|아마존|무신사|musinsa|잡화|생활용품|가전|electronics/i;
+  if (shoppingKeywords.test(text)) return 'shopping';
+
+  // 주거/생활 (housing)
+  const housingKeywords = /전기|electricity|수도|water|가스|gas\s*bill|관리비|maintenance|월세|rent|보증금|deposit|인테리어|interior|가구|furniture|이케아|ikea|세탁|laundry|청소|cleaning|아파트|apartment|부동산|real\s*estate/i;
+  if (housingKeywords.test(text)) return 'housing';
+
+  // 의료/건강 (medical)
+  const medicalKeywords = /병원|hospital|clinic|약국|pharmacy|의원|medical|치과|dental|안과|eye|피부과|derma|한의원|한약|건강검진|health\s*check|약|medicine|drug|헬스|gym|fitness|필라테스|pilates|요가|yoga|pt|personal\s*training|건강|health|진료|treatment|수술|surgery|보험료|premium/i;
+  if (medicalKeywords.test(text)) return 'medical';
+
+  // 교육 (education)
+  const educationKeywords = /학원|academy|학교|school|대학|university|교육|education|강의|lecture|수업|class|학비|tuition|교재|textbook|서점|bookstore|도서|book|인강|온라인\s*강의|udemy|coursera|인프런|노트|스터디|study|학습|learning/i;
+  if (educationKeywords.test(text)) return 'education';
+
+  // 여가/문화 (entertainment)
+  const entertainmentKeywords = /영화|movie|cinema|cgv|megabox|롯데시네마|공연|concert|show|놀이공원|amusement|테마파크|theme\s*park|게임|game|넷플릭스|netflix|유튜브|youtube|디즈니|disney|음악|music|스포츠|sports|여행|travel|호텔|hotel|숙소|accommodation|airbnb|에어비앤비|리조트|resort|관광|tour|미술관|museum|갤러리|gallery|도서관|library/i;
+  if (entertainmentKeywords.test(text)) return 'entertainment';
+
+  // 통신 (communication)
+  const communicationKeywords = /통신|telecom|핸드폰|phone|skt|sk텔레콤|kt|lg유플러스|lgu\+|알뜰폰|인터넷|internet|와이파이|wifi|데이터|data\s*plan|요금|bill|앱스토어|app\s*store|구글\s*플레이|google\s*play/i;
+  if (communicationKeywords.test(text)) return 'communication';
+
+  // 보험 (insurance)
+  const insuranceKeywords = /보험|insurance|생명보험|life\s*insurance|자동차\s*보험|car\s*insurance|실손|건강보험|화재보험|삼성생명|한화생명|현대해상|db손보|보험료/i;
+  if (insuranceKeywords.test(text)) return 'insurance';
+
+  // 저축/투자 (savings)
+  const savingsKeywords = /저축|savings|투자|invest|주식|stock|펀드|fund|적금|deposit|예금|은행|bank|증권|securities|코인|crypto|bitcoin|이자|interest\s*(?:income|earned)/i;
+  if (savingsKeywords.test(text)) return 'savings';
+
+  // 기타
+  return 'other_expense';
 }
 
 // 결제 수단 감지 — 강화

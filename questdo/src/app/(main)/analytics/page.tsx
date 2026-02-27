@@ -182,14 +182,17 @@ export default function AnalyticsPage() {
       }
     }).length;
 
-    const totalHabitChecks = habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
+    const totalHabitChecks = user?.stats?.totalHabitChecks || habits.reduce((sum, h) => sum + (h.completedDates?.length || 0), 0);
+
+    // XP 계산: Firestore의 totalXp 사용 (실시간 정확한 값)
+    const totalXp = user?.totalXp || 0;
 
     return {
       tasksCompleted: thisWeekCompleted,
-      totalCompleted: completedTasks.length,
+      totalCompleted: user?.stats?.totalCompleted || completedTasks.length,
       habitRate,
       totalHabitChecks,
-      xpEarned: user?.totalXp || 0,
+      xpEarned: totalXp,
       streakDays: user?.stats?.currentStreak || 0,
     };
   }, [tasks, completedTasks, habits, habitRate, user]);
@@ -540,6 +543,33 @@ export default function AnalyticsPage() {
                   <div className="text-center p-3 rounded-xl bg-secondary/50">
                     <p className="text-[14px] font-bold text-[#34C759] truncate">{user?.title || (lang === 'ko' ? '초보 모험가' : 'Beginner')}</p>
                     <p className="text-[10px] text-muted-foreground mt-0.5">{lang === 'ko' ? '칭호' : 'Title'}</p>
+                  </div>
+                </div>
+
+                {/* XP 상세 내역 */}
+                <div className="mt-4 pt-3 border-t border-border/30 space-y-2">
+                  <p className="text-[12px] font-medium mb-2">{lang === 'ko' ? 'XP 누적 내역' : 'XP Breakdown'}</p>
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <CheckCircle2 className="h-3 w-3 text-[#34C759]" />
+                      {lang === 'ko' ? '할 일 완료' : 'Task Completions'}
+                    </span>
+                    <span className="font-medium text-[#34C759]">
+                      +{(user?.stats?.totalCompleted || 0) * 10} XP
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[12px]">
+                    <span className="text-muted-foreground flex items-center gap-1.5">
+                      <Repeat className="h-3 w-3 text-[#007AFF]" />
+                      {lang === 'ko' ? '습관 체크' : 'Habit Checks'}
+                    </span>
+                    <span className="font-medium text-[#007AFF]">
+                      +{(user?.stats?.totalHabitChecks || 0) * 5} XP
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[12px] pt-1 border-t border-border/20">
+                    <span className="font-medium">{lang === 'ko' ? '현재 누적 XP' : 'Current Total XP'}</span>
+                    <span className="font-bold text-[#AF52DE]">{user?.totalXp || 0} XP</span>
                   </div>
                 </div>
               </CardContent>

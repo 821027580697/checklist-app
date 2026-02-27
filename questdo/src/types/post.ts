@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 import { TaskCategory } from './task';
 
 // 포스트 유형
-export type PostType = 'completion' | 'badge' | 'challenge' | 'milestone';
+export type PostType = 'general' | 'completion' | 'badge' | 'challenge' | 'milestone';
 
 // 포스트 리액션
 export interface PostReactions {

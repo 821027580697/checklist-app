@@ -1,4 +1,4 @@
-// 습관 CRUD 훅 — Firestore 실시간 리스너 기반
+// 습관 CRUD 훅 — Firestore 실시간 리스너 기반 + XP 정확한 ±
 'use client';
 
 import { useEffect, useCallback } from 'react';
@@ -16,6 +16,9 @@ import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { Timestamp, DocumentData } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { calculateHabitXp } from '@/lib/gamification/xpSystem';
+
+const XP_BASE_HABIT = 5; // 기본 습관 체크 XP
 
 export const useHabits = () => {
   const habits = useHabitStore((s) => s.habits);
@@ -26,6 +29,7 @@ export const useHabits = () => {
   const removeHabit = useHabitStore((s) => s.removeHabit);
   const setLoading = useHabitStore((s) => s.setLoading);
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
 
   // 습관 생성
   const createHabit = useCallback(
@@ -64,9 +68,11 @@ export const useHabits = () => {
     [user, addHabit],
   );
 
-  // 오늘 습관 체크/언체크 (낙관적 업데이트)
+  // 오늘 습관 체크/언체크 (낙관적 업데이트 + XP ± 처리)
   const toggleTodayCheck = useCallback(
     async (habit: Habit) => {
+      if (!user) return;
+
       const todayStr = format(new Date(), 'yyyy-MM-dd');
       const currentDates = habit.completedDates || [];
       const alreadyChecked = currentDates.includes(todayStr);
@@ -75,9 +81,11 @@ export const useHabits = () => {
       let newTotalChecks: number;
 
       if (alreadyChecked) {
+        // 언체크: 날짜 제거, 카운트 감소
         newDates = currentDates.filter((d) => d !== todayStr);
         newTotalChecks = Math.max(0, (habit.totalChecks || 0) - 1);
       } else {
+        // 체크: 날짜 추가, 카운트 증가
         newDates = [...currentDates, todayStr];
         newTotalChecks = (habit.totalChecks || 0) + 1;
       }
@@ -100,15 +108,62 @@ export const useHabits = () => {
           throw error;
         }
 
+        // XP 업데이트 — Firestore에 정확하게 기록
+        const xpAmount = XP_BASE_HABIT;
+
         if (!alreadyChecked) {
-          toast.success('습관 체크 완료! +5 XP');
+          // 체크: XP 추가
+          const newTotalXp = (user.totalXp || 0) + xpAmount;
+          const newXp = (user.xp || 0) + xpAmount;
+          const newTotalHabitChecks = (user.stats?.totalHabitChecks || 0) + 1;
+
+          await updateDocument('users', user.uid, {
+            totalXp: newTotalXp,
+            xp: newXp,
+            'stats.totalHabitChecks': newTotalHabitChecks,
+          });
+
+          setUser({
+            ...user,
+            totalXp: newTotalXp,
+            xp: newXp,
+            stats: {
+              ...user.stats,
+              totalHabitChecks: newTotalHabitChecks,
+            },
+          });
+
+          toast.success(`습관 체크 완료! +${xpAmount} XP`);
+        } else {
+          // 언체크: XP 차감
+          const newTotalXp = Math.max(0, (user.totalXp || 0) - xpAmount);
+          const newXp = Math.max(0, (user.xp || 0) - xpAmount);
+          const newTotalHabitChecks = Math.max(0, (user.stats?.totalHabitChecks || 0) - 1);
+
+          await updateDocument('users', user.uid, {
+            totalXp: newTotalXp,
+            xp: newXp,
+            'stats.totalHabitChecks': newTotalHabitChecks,
+          });
+
+          setUser({
+            ...user,
+            totalXp: newTotalXp,
+            xp: newXp,
+            stats: {
+              ...user.stats,
+              totalHabitChecks: newTotalHabitChecks,
+            },
+          });
+
+          toast.info(`습관 체크 취소 -${xpAmount} XP`);
         }
       } catch (error) {
         console.error('습관 체크 실패:', error);
         toast.error('습관 체크에 실패했습니다');
       }
     },
-    [updateHabit],
+    [user, updateHabit, setUser],
   );
 
   // 습관 삭제 (낙관적 삭제)

@@ -1,5 +1,5 @@
 // 스트릭 체크 훅 — 날짜 기반 1일 1회 카운트 + 미완료 시 리셋
-// ✅ 고도화: localStorage 백업, 엄격한 중복 방지, 마운트 시 재실행 방지
+// ✅ 고도화: 실시간 반영, 오늘 기준 1일 시작, localStorage 백업
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
@@ -90,13 +90,22 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [cheerMessage, setCheerMessage] = useState('');
-  const hasProcessedRef = useRef(false); // 이 마운트에서 이미 처리했는지
   const isBusyRef = useRef(false); // 비동기 처리 중인지
+  const alreadyIncrementedTodayRef = useRef(false); // 오늘 이미 증가했는지
 
   const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), []);
   const today = useMemo(() => new Date(), []);
 
-  // 오늘 할 일 완료 여부
+  // 오늘 이미 처리했는지 초기 확인
+  useEffect(() => {
+    const localLastDate = getLocalStreakDate();
+    const serverLastDate = user?.stats?.lastStreakDate || '';
+    if (localLastDate === todayStr || serverLastDate === todayStr) {
+      alreadyIncrementedTodayRef.current = true;
+    }
+  }, [user?.stats?.lastStreakDate, todayStr]);
+
+  // 오늘 할 일 완료 여부 (실시간 반영)
   const todayTasksStatus = useMemo(() => {
     if (!isFetchedTasks) return { total: 0, completed: 0, allDone: false };
 
@@ -117,7 +126,7 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     };
   }, [tasks, isFetchedTasks, today]);
 
-  // 오늘 습관 완료 여부
+  // 오늘 습관 완료 여부 (실시간 반영)
   const todayHabitsStatus = useMemo(() => {
     if (!isFetchedHabits) return { total: 0, checked: 0, allDone: false };
 
@@ -157,16 +166,20 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
   const currentStreak = user?.stats?.currentStreak || 0;
 
-  // 스트릭 업데이트 함수
+  // 스트릭 업데이트 함수 — bothComplete가 true가 되면 실행
   const processStreak = useCallback(async () => {
     if (!user || !isFirebaseConfigured) return;
     if (!isFetchedTasks || !isFetchedHabits) return;
-    if (hasProcessedRef.current || isBusyRef.current) return;
+    if (isBusyRef.current) return;
+    if (alreadyIncrementedTodayRef.current) return;
+
+    // bothComplete가 아닌 경우는 스트릭 증가 안함 (체크만 실시간 반영)
+    if (!bothComplete) return;
 
     isBusyRef.current = true;
 
     try {
-      // Firestore에서 최신 사용자 데이터 읽기 (로컬 상태가 오래될 수 있으므로)
+      // Firestore에서 최신 사용자 데이터 읽기
       let serverLastStreakDate = user.stats?.lastStreakDate || '';
       let serverCurrentStreak = user.stats?.currentStreak || 0;
       let serverLongestStreak = user.stats?.longestStreak || 0;
@@ -190,93 +203,110 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
       // 오늘 이미 처리했으면 스킵
       if (serverLastStreakDate === todayStr || localLastDate === todayStr) {
-        hasProcessedRef.current = true;
+        alreadyIncrementedTodayRef.current = true;
         return;
       }
 
+      alreadyIncrementedTodayRef.current = true;
+
       const yesterdayStr = format(subDays(today, 1), 'yyyy-MM-dd');
 
-      // 어제보다 이전이면 스트릭 리셋
-      if (serverLastStreakDate && serverLastStreakDate !== yesterdayStr && serverLastStreakDate !== todayStr) {
-        if (serverCurrentStreak > 0) {
-          await updateDocument('users', user.uid, {
-            'stats.currentStreak': 0,
-          });
-          setUser({
-            ...user,
-            stats: {
-              ...user.stats,
-              currentStreak: 0,
-            },
-          });
-          setLocalStreakCount(0);
-          // 리셋 후 100% 완료라면 새로 +1 처리
-          serverCurrentStreak = 0;
-        }
-      }
+      // 어제가 마지막이면 연속, 아니면 오늘부터 1일 시작
+      const isConsecutive = serverLastStreakDate === yesterdayStr;
+      const newStreak = isConsecutive ? serverCurrentStreak + 1 : 1;
+      const newLongest = Math.max(newStreak, serverLongestStreak);
 
-      // 오늘 100% 완료 시 +1
-      if (bothComplete) {
-        hasProcessedRef.current = true;
+      // 응원 메시지
+      const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
+      const msg = messages[Math.floor(Math.random() * messages.length)];
+      setCheerMessage(msg);
+      setShowCelebration(true);
 
-        // 응원 메시지
-        const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
-        const msg = messages[Math.floor(Math.random() * messages.length)];
-        setCheerMessage(msg);
-        setShowCelebration(true);
+      // Firestore 업데이트
+      await updateDocument('users', user.uid, {
+        'stats.currentStreak': newStreak,
+        'stats.longestStreak': newLongest,
+        'stats.lastStreakDate': todayStr,
+      });
 
-        // 어제가 마지막이면 연속, 아니면 1부터
-        const isConsecutive = serverLastStreakDate === yesterdayStr || serverLastStreakDate === '';
-        const newStreak = isConsecutive ? serverCurrentStreak + 1 : 1;
-        const newLongest = Math.max(newStreak, serverLongestStreak);
+      // localStorage에도 저장
+      setLocalStreakDate(todayStr);
+      setLocalStreakCount(newStreak);
 
-        // Firestore 업데이트
-        await updateDocument('users', user.uid, {
-          'stats.currentStreak': newStreak,
-          'stats.longestStreak': newLongest,
-          'stats.lastStreakDate': todayStr,
-        });
+      // 로컬 상태 업데이트
+      setUser({
+        ...user,
+        stats: {
+          ...user.stats,
+          currentStreak: newStreak,
+          longestStreak: newLongest,
+          lastStreakDate: todayStr,
+        },
+      });
 
-        // localStorage에도 저장 (이중 안전장치)
-        setLocalStreakDate(todayStr);
-        setLocalStreakCount(newStreak);
-
-        // 로컬 상태 업데이트
-        setUser({
-          ...user,
-          stats: {
-            ...user.stats,
-            currentStreak: newStreak,
-            longestStreak: newLongest,
-            lastStreakDate: todayStr,
-          },
-        });
-
-        // 축하 애니메이션 타이머
-        setTimeout(() => {
-          setShowCelebration(false);
-        }, 4000);
-      } else {
-        hasProcessedRef.current = true;
-      }
+      // 축하 애니메이션 타이머
+      setTimeout(() => {
+        setShowCelebration(false);
+      }, 4000);
     } finally {
       isBusyRef.current = false;
     }
   }, [user, isFetchedTasks, isFetchedHabits, bothComplete, todayStr, today, lang, setUser]);
 
-  // 스트릭 체크 실행 — 데이터가 준비되고 완료 상태가 변경될 때만
+  // 실시간 반영: bothComplete가 변경될 때마다 스트릭 체크
   useEffect(() => {
     if (!user || !isFirebaseConfigured) return;
     if (!isFetchedTasks || !isFetchedHabits) return;
-    if (hasProcessedRef.current) return;
+    if (alreadyIncrementedTodayRef.current) return;
+    if (!bothComplete) return;
 
-    // 데이터가 모두 로드된 후 약간의 지연을 두고 실행 (데이터 안정화 대기)
+    // bothComplete가 true가 되면 약간의 딜레이 후 실행
     const timer = setTimeout(() => {
       processStreak();
-    }, 500);
+    }, 300);
 
     return () => clearTimeout(timer);
-  }, [processStreak, user, isFetchedTasks, isFetchedHabits]);
+  }, [processStreak, user, isFetchedTasks, isFetchedHabits, bothComplete]);
+
+  // 페이지 마운트 시 이전 날짜의 스트릭 리셋 확인
+  useEffect(() => {
+    if (!user || !isFirebaseConfigured) return;
+    if (!isFetchedTasks || !isFetchedHabits) return;
+
+    const checkStaleStreak = async () => {
+      if (isBusyRef.current) return;
+
+      const serverLastDate = user.stats?.lastStreakDate || '';
+      if (!serverLastDate) return; // 기록 없으면 스킵
+
+      const yesterdayStr = format(subDays(new Date(), 1), 'yyyy-MM-dd');
+
+      // 마지막 스트릭 날짜가 어제도 아니고 오늘도 아니면 → 스트릭 리셋
+      if (serverLastDate !== todayStr && serverLastDate !== yesterdayStr) {
+        if ((user.stats?.currentStreak || 0) > 0) {
+          isBusyRef.current = true;
+          try {
+            await updateDocument('users', user.uid, {
+              'stats.currentStreak': 0,
+            });
+            setUser({
+              ...user,
+              stats: {
+                ...user.stats,
+                currentStreak: 0,
+              },
+            });
+            setLocalStreakCount(0);
+          } finally {
+            isBusyRef.current = false;
+          }
+        }
+      }
+    };
+
+    const timer = setTimeout(checkStaleStreak, 500);
+    return () => clearTimeout(timer);
+  }, [user?.uid, isFetchedTasks, isFetchedHabits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     tasksAllDone: todayTasksStatus.allDone,

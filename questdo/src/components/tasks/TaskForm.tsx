@@ -327,26 +327,27 @@ export const TaskForm = ({
                         if (data.title && !formData.title) {
                           setFormData((prev) => ({ ...prev, title: data.title }));
                         }
-                        if (data.merchant) {
-                          updateFinanceData({ merchant: data.merchant });
+                        const financeUpdates: Partial<FinanceData> = {};
+                        if (data.merchant) financeUpdates.merchant = data.merchant;
+                        if (data.amount > 0) financeUpdates.amount = data.amount;
+                        if (data.currency) financeUpdates.currency = data.currency;
+                        if (data.transactionType) financeUpdates.transactionType = data.transactionType;
+                        if (data.paymentMethod) financeUpdates.paymentMethod = data.paymentMethod;
+                        if (data.receiptImageUrl) financeUpdates.receiptImageUrl = data.receiptImageUrl;
+                        // OCR에서 자동 분류된 지출 카테고리 적용
+                        if (data.expenseCategory) {
+                          financeUpdates.expenseCategory = data.expenseCategory as ExpenseCategory;
                         }
-                        if (data.amount > 0) {
-                          updateFinanceData({ amount: data.amount });
-                        }
-                        if (data.currency) {
-                          updateFinanceData({ currency: data.currency });
-                        }
-                        if (data.transactionType) {
-                          updateFinanceData({ transactionType: data.transactionType });
-                        }
-                        if (data.paymentMethod) {
-                          updateFinanceData({ paymentMethod: data.paymentMethod });
-                        }
-                        if (data.receiptImageUrl) {
-                          updateFinanceData({ receiptImageUrl: data.receiptImageUrl });
-                        }
+                        updateFinanceData(financeUpdates);
                         if (data.date) {
                           setFormData((prev) => ({ ...prev, dueDate: data.date }));
+                        }
+                        // 메모에 인식된 항목 자동 추가
+                        if (data.items && data.items.length > 0) {
+                          const itemsText = data.items.map(item =>
+                            `${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}`
+                          ).join(', ');
+                          updateFinanceData({ memo: itemsText });
                         }
                         setShowReceiptScanner(false);
                       }}

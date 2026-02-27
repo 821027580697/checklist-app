@@ -49,10 +49,10 @@ export default function ProfilePage() {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // 파일 형식 검증
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error(lang === 'ko' ? 'JPG, PNG, WebP, GIF 형식만 가능합니다' : 'Only JPG, PNG, WebP, GIF allowed');
+    // 파일 형식 검증 (넓은 범위 허용)
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif'];
+    if (!allowedTypes.includes(file.type) && !file.type.startsWith('image/')) {
+      toast.error(lang === 'ko' ? '이미지 파일만 업로드 가능합니다' : 'Only image files allowed');
       return;
     }
 
@@ -64,9 +64,17 @@ export default function ProfilePage() {
 
     setIsUploading(true);
     try {
+      // 이미지 업로드 (내부적으로 압축 처리)
       const { url, error } = await uploadAvatar(user.uid, file);
-      if (error) throw error;
-      if (!url) throw new Error('Upload failed');
+      if (error) {
+        const errMsg = error.message || '';
+        // Firebase Storage 규칙 에러 구분
+        if (errMsg.includes('storage/unauthorized') || errMsg.includes('does not have permission')) {
+          throw new Error(lang === 'ko' ? 'Storage 권한이 없습니다. 관리자에게 문의하세요.' : 'Storage permission denied.');
+        }
+        throw error;
+      }
+      if (!url) throw new Error('Upload failed - no URL returned');
 
       // Firestore 업데이트
       const { error: updateError } = await updateDocument('users', user.uid, {
@@ -76,10 +84,15 @@ export default function ProfilePage() {
 
       // 로컬 상태 업데이트
       setUser({ ...user, avatarUrl: url });
-      toast.success(lang === 'ko' ? '프로필 사진이 변경되었습니다' : 'Profile photo updated');
+      toast.success(lang === 'ko' ? '프로필 사진이 변경되었습니다 ✅' : 'Profile photo updated ✅');
     } catch (err) {
       console.error('Failed to upload avatar:', err);
-      toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다' : 'Failed to upload photo');
+      const errMessage = err instanceof Error ? err.message : '';
+      if (errMessage.includes('Storage not initialized')) {
+        toast.error(lang === 'ko' ? 'Storage가 초기화되지 않았습니다' : 'Storage not initialized');
+      } else {
+        toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다. 다시 시도해주세요.' : 'Failed to upload. Please try again.');
+      }
     } finally {
       setIsUploading(false);
       // 파일 input 리셋

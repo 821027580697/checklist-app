@@ -209,17 +209,25 @@ export default function FeedPage() {
     if (!db) return;
     setIsLoadingComments(true);
     try {
+      // 복합 인덱스 없이도 동작하도록 postId 필터만 사용 후 클라이언트 정렬
       const q = query(
         collection(db, 'comments'),
         where('postId', '==', postId),
-        orderBy('createdAt', 'asc'),
-        limit(50),
+        limit(100),
       );
       const snapshot = await getDocs(q);
       const loadedComments = snapshot.docs.map((d) => ({
         id: d.id,
         ...d.data(),
       })) as Comment[];
+
+      // 클라이언트에서 createdAt 기준 오름차순 정렬
+      loadedComments.sort((a, b) => {
+        const aTime = a.createdAt?.toDate?.()?.getTime?.() || 0;
+        const bTime = b.createdAt?.toDate?.()?.getTime?.() || 0;
+        return aTime - bTime;
+      });
+
       setComments(loadedComments);
     } catch (err) {
       console.error('Failed to load comments:', err);
@@ -232,32 +240,56 @@ export default function FeedPage() {
   // 댓글 작성
   const handleAddComment = async (postId: string) => {
     if (!user || !db || !commentText.trim()) return;
+    const trimmedText = commentText.trim();
     try {
-      const newComment = {
+      const commentData = {
         postId,
         userId: user.uid,
         userNickname: user.nickname,
         userAvatar: user.avatarUrl || user.nickname?.charAt(0) || '?',
-        text: commentText.trim(),
+        text: trimmedText,
         createdAt: serverTimestamp(),
       };
 
-      await addDoc(collection(db, 'comments'), newComment);
+      // 즉시 입력 필드 초기화 (UX 개선)
+      setCommentText('');
+
+      // 낙관적 업데이트: 로컬에 바로 댓글 표시
+      const optimisticComment: Comment = {
+        id: `temp-${Date.now()}`,
+        postId,
+        userId: user.uid,
+        userNickname: user.nickname || '',
+        userAvatar: user.avatarUrl || user.nickname?.charAt(0) || '?',
+        text: trimmedText,
+        createdAt: Timestamp.now(),
+      };
+      setComments((prev) => [...prev, optimisticComment]);
+
+      // Firestore에 댓글 저장
+      const docRef = await addDoc(collection(db, 'comments'), commentData);
+
+      // 낙관적 댓글 ID를 실제 ID로 교체
+      setComments((prev) =>
+        prev.map((c) => (c.id === optimisticComment.id ? { ...c, id: docRef.id } : c)),
+      );
+
+      // 게시글 댓글 수 증가
       const postRef = doc(db, 'posts', postId);
       await updateDoc(postRef, { commentsCount: increment(1) });
-
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId ? { ...p, commentsCount: (p.commentsCount || 0) + 1 } : p,
         ),
       );
 
-      setCommentText('');
-      loadComments(postId);
       toast.success(lang === 'ko' ? '댓글이 작성되었습니다' : 'Comment added');
     } catch (err) {
       console.error('Failed to add comment:', err);
       toast.error(lang === 'ko' ? '댓글 작성에 실패했습니다' : 'Failed to add comment');
+      // 실패 시 낙관적 업데이트 롤백
+      setCommentText(trimmedText);
+      loadComments(postId);
     }
   };
 

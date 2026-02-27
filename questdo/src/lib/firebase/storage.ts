@@ -7,7 +7,57 @@ import {
 } from 'firebase/storage';
 import { storage } from './config';
 
-// 이미지 업로드 (프로필 아바타)
+// 이미지 압축 유틸 — Canvas로 리사이즈 + JPEG 압축
+async function compressImage(file: File, maxDim: number = 800, quality: number = 0.8): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        let { width, height } = img;
+
+        // 최대 크기 제한
+        if (width > maxDim || height > maxDim) {
+          const ratio = Math.min(maxDim / width, maxDim / height);
+          width = Math.round(width * ratio);
+          height = Math.round(height * ratio);
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d')!;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              resolve(blob);
+            } else {
+              // Blob 생성 실패 시 원본 파일 사용
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality,
+        );
+      } catch {
+        resolve(file);
+      }
+    };
+    img.onerror = () => reject(new Error('이미지를 로드할 수 없습니다'));
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      img.src = e.target?.result as string;
+    };
+    reader.onerror = () => reject(new Error('파일을 읽을 수 없습니다'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// 이미지 업로드 (프로필 아바타) — 압축 포함
 export const uploadAvatar = async (
   userId: string,
   file: File,
@@ -19,11 +69,33 @@ export const uploadAvatar = async (
       throw new Error('파일 크기는 5MB 이하여야 합니다.');
     }
 
-    const storageRef = ref(storage, `avatars/${userId}/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
+    // 이미지 압축 (프로필은 400px 정도면 충분)
+    let uploadData: Blob | File;
+    try {
+      uploadData = await compressImage(file, 400, 0.85);
+    } catch {
+      // 압축 실패 시 원본 사용
+      uploadData = file;
+    }
+
+    const ext = file.name.split('.').pop() || 'jpg';
+    const fileName = `${Date.now()}_avatar.${ext}`;
+    const storageRef = ref(storage, `avatars/${userId}/${fileName}`);
+
+    // metadata 설정
+    const metadata = {
+      contentType: 'image/jpeg',
+      customMetadata: {
+        userId,
+        type: 'avatar',
+      },
+    };
+
+    await uploadBytes(storageRef, uploadData, metadata);
     const url = await getDownloadURL(storageRef);
     return { url, error: null };
   } catch (error) {
+    console.error('[Storage] Avatar upload failed:', error);
     return { url: null, error: error as Error };
   }
 };
@@ -40,11 +112,20 @@ export const uploadPostImage = async (
       throw new Error('파일 크기는 10MB 이하여야 합니다.');
     }
 
+    // 이미지 압축
+    let uploadData: Blob | File;
+    try {
+      uploadData = await compressImage(file, 1200, 0.85);
+    } catch {
+      uploadData = file;
+    }
+
     const storageRef = ref(storage, `posts/${userId}/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
+    await uploadBytes(storageRef, uploadData, { contentType: 'image/jpeg' });
     const url = await getDownloadURL(storageRef);
     return { url, error: null };
   } catch (error) {
+    console.error('[Storage] Post image upload failed:', error);
     return { url: null, error: error as Error };
   }
 };
@@ -61,11 +142,20 @@ export const uploadReceiptImage = async (
       throw new Error('파일 크기는 10MB 이하여야 합니다.');
     }
 
+    // 영수증은 해상도 유지가 중요하므로 가볍게 압축
+    let uploadData: Blob | File;
+    try {
+      uploadData = await compressImage(file, 1600, 0.9);
+    } catch {
+      uploadData = file;
+    }
+
     const storageRef = ref(storage, `receipts/${userId}/${Date.now()}_${file.name}`);
-    await uploadBytes(storageRef, file);
+    await uploadBytes(storageRef, uploadData, { contentType: 'image/jpeg' });
     const url = await getDownloadURL(storageRef);
     return { url, error: null };
   } catch (error) {
+    console.error('[Storage] Receipt image upload failed:', error);
     return { url: null, error: error as Error };
   }
 };
