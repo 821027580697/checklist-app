@@ -48,6 +48,7 @@ export default function AchievementsPage() {
       currentStreak: user?.stats?.currentStreak || 0,
       longestStreak: user?.stats?.longestStreak || 0,
       totalHabitChecks,
+      lastStreakDate: user?.stats?.lastStreakDate || '',
     };
   }, [tasks, habits, user]);
 

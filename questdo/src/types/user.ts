@@ -27,6 +27,7 @@ export interface UserStats {
   currentStreak: number;    // 현재 연속 달성 일수
   longestStreak: number;    // 최장 연속 달성 일수
   totalHabitChecks: number; // 총 습관 체크 수
+  lastStreakDate: string;   // 마지막 스트릭 기록 날짜 (YYYY-MM-DD)
 }
 
 // 사용자 설정
@@ -75,4 +76,5 @@ export const DEFAULT_USER_STATS: UserStats = {
   currentStreak: 0,
   longestStreak: 0,
   totalHabitChecks: 0,
+  lastStreakDate: '',
 };

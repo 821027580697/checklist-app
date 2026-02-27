@@ -1,4 +1,4 @@
-// 스트릭 체크 훅 — 할 일/습관 100% 완료 시 +1일 자동 카운트
+// 스트릭 체크 훅 — 날짜 기반 1일 1회 카운트 + 미완료 시 리셋
 'use client';
 
 import { useEffect, useRef, useState, useMemo } from 'react';
@@ -7,7 +7,7 @@ import { useHabitStore } from '@/stores/habitStore';
 import { useAuthStore } from '@/stores/authStore';
 import { updateDocument } from '@/lib/firebase/firestore';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
-import { isSameDay, format } from 'date-fns';
+import { isSameDay, format, subDays, parseISO } from 'date-fns';
 
 // 응원 메시지
 const CHEER_MESSAGES_KO = [
@@ -55,8 +55,7 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
 
   const [showCelebration, setShowCelebration] = useState(false);
   const [cheerMessage, setCheerMessage] = useState('');
-  const prevBothCompleteRef = useRef(false);
-  const streakUpdatedTodayRef = useRef(false);
+  const processingRef = useRef(false);
 
   const today = useMemo(() => new Date(), []);
   const todayStr = format(today, 'yyyy-MM-dd');
@@ -97,7 +96,7 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     });
 
     const checked = todayHabits.filter((h) =>
-      (h.completedDates || []).includes(todayStr)
+      (h.completedDates || []).includes(todayStr),
     ).length;
 
     return {
@@ -112,10 +111,8 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
     const hasTasks = todayTasksStatus.total > 0;
     const hasHabits = todayHabitsStatus.total > 0;
 
-    // 둘 다 없으면 완료가 아님
     if (!hasTasks && !hasHabits) return false;
 
-    // 있는 것만 기준으로 체크
     const tasksOk = !hasTasks || todayTasksStatus.allDone;
     const habitsOk = !hasHabits || todayHabitsStatus.allDone;
 
@@ -123,15 +120,43 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
   }, [todayTasksStatus, todayHabitsStatus]);
 
   const currentStreak = user?.stats?.currentStreak || 0;
+  const lastStreakDate = user?.stats?.lastStreakDate || '';
 
-  // 스트릭 업데이트 + 축하 트리거
+  // 스트릭 업데이트 — 날짜 기반 1일 1회만, 어제 미달성 시 리셋
   useEffect(() => {
     if (!user || !isFirebaseConfigured) return;
     if (!isFetchedTasks || !isFetchedHabits) return;
+    if (processingRef.current) return;
 
-    // bothComplete가 false → true로 바뀔 때
-    if (bothComplete && !prevBothCompleteRef.current && !streakUpdatedTodayRef.current) {
-      streakUpdatedTodayRef.current = true;
+    // ── 1) 어제 미달성 시 스트릭 리셋 체크 ──
+    const yesterdayStr = format(subDays(today, 1), 'yyyy-MM-dd');
+
+    // lastStreakDate가 어제보다 이전이면 (어제 달성하지 못했으면) 스트릭 리셋
+    if (lastStreakDate && lastStreakDate !== todayStr && lastStreakDate !== yesterdayStr) {
+      // 어제도, 오늘도 아닌 이전 날짜 → 중간에 빠진 날이 있으므로 리셋
+      if (currentStreak > 0) {
+        processingRef.current = true;
+        updateDocument('users', user.uid, {
+          'stats.currentStreak': 0,
+        });
+        setUser({
+          ...user,
+          stats: {
+            ...user.stats,
+            currentStreak: 0,
+          },
+        });
+        processingRef.current = false;
+        return;
+      }
+    }
+
+    // ── 2) 오늘 이미 카운트했으면 스킵 ──
+    if (lastStreakDate === todayStr) return;
+
+    // ── 3) 오늘 100% 완료 시 +1 ──
+    if (bothComplete) {
+      processingRef.current = true;
 
       // 응원 메시지 선택
       const messages = lang === 'ko' ? CHEER_MESSAGES_KO : CHEER_MESSAGES_EN;
@@ -139,14 +164,16 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
       setCheerMessage(msg);
       setShowCelebration(true);
 
-      // 스트릭 +1 업데이트
-      const newStreak = currentStreak + 1;
+      // 스트릭 +1 (어제가 마지막 날짜이면 연속, 아니면 1부터 시작)
+      const isConsecutive = lastStreakDate === yesterdayStr || lastStreakDate === '';
+      const newStreak = isConsecutive ? currentStreak + 1 : 1;
       const newLongest = Math.max(newStreak, user.stats?.longestStreak || 0);
 
-      // Firestore 업데이트
+      // Firestore 업데이트 (lastStreakDate로 중복 방지)
       updateDocument('users', user.uid, {
         'stats.currentStreak': newStreak,
         'stats.longestStreak': newLongest,
+        'stats.lastStreakDate': todayStr,
       });
 
       // 로컬 상태 업데이트
@@ -156,15 +183,17 @@ export const useStreakCheck = (lang: 'ko' | 'en' = 'ko'): StreakCheckResult => {
           ...user.stats,
           currentStreak: newStreak,
           longestStreak: newLongest,
+          lastStreakDate: todayStr,
         },
       });
 
       // 축하 애니메이션 타이머
-      setTimeout(() => setShowCelebration(false), 4000);
+      setTimeout(() => {
+        setShowCelebration(false);
+        processingRef.current = false;
+      }, 4000);
     }
-
-    prevBothCompleteRef.current = bothComplete;
-  }, [bothComplete, user, isFetchedTasks, isFetchedHabits, currentStreak, lang, setUser]);
+  }, [bothComplete, user?.uid, isFetchedTasks, isFetchedHabits, todayStr]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     tasksAllDone: todayTasksStatus.allDone,

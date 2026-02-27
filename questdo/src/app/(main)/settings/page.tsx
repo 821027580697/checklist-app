@@ -1,7 +1,7 @@
 // 설정 페이지
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,6 +23,7 @@ import { useUIStore } from '@/stores/uiStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { signOut } from '@/lib/firebase/auth';
 import { updateDocument } from '@/lib/firebase/firestore';
+import { uploadAvatar } from '@/lib/firebase/storage';
 import { toast } from 'sonner';
 import {
   User,
@@ -36,6 +37,8 @@ import {
   Sun,
   Moon,
   Monitor,
+  Camera,
+  Loader2,
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -48,6 +51,8 @@ export default function SettingsPage() {
   const [nickname, setNickname] = useState(user?.nickname || '');
   const [bio, setBio] = useState(user?.bio || '');
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setUser = useAuthStore((state) => state.setUser);
 
@@ -65,6 +70,36 @@ export default function SettingsPage() {
       toast.error(lang === 'ko' ? '저장에 실패했습니다' : 'Failed to save');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // 프로필 사진 업로드
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.type)) {
+      toast.error(lang === 'ko' ? 'JPG, PNG, WebP, GIF 형식만 가능합니다' : 'Only JPG, PNG, WebP, GIF allowed');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error(lang === 'ko' ? '5MB 이하 파일만 가능합니다' : 'Max 5MB');
+      return;
+    }
+    setIsUploading(true);
+    try {
+      const { url, error } = await uploadAvatar(user.uid, file);
+      if (error) throw error;
+      if (!url) throw new Error('Upload failed');
+      const { error: updateError } = await updateDocument('users', user.uid, { avatarUrl: url });
+      if (updateError) throw updateError;
+      setUser({ ...user, avatarUrl: url });
+      toast.success(lang === 'ko' ? '프로필 사진이 변경되었습니다' : 'Profile photo updated');
+    } catch {
+      toast.error(lang === 'ko' ? '사진 업로드에 실패했습니다' : 'Failed to upload');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -94,6 +129,44 @@ export default function SettingsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 프로필 사진 */}
+          <div className="flex items-center gap-4">
+            <div className="relative group">
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-blue-400 to-purple-500 text-2xl cursor-pointer overflow-hidden ring-2 ring-background shadow-md transition-transform group-hover:scale-105"
+              >
+                {isUploading ? (
+                  <Loader2 className="h-6 w-6 text-white animate-spin" />
+                ) : user?.avatarUrl?.startsWith('http') ? (
+                  <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-white font-bold">{user?.nickname?.charAt(0) || '?'}</span>
+                )}
+              </div>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                className="absolute -bottom-0.5 -right-0.5 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm"
+              >
+                <Camera className="h-3 w-3" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                className="hidden"
+                onChange={handleAvatarUpload}
+              />
+            </div>
+            <div>
+              <p className="text-[14px] font-semibold">{user?.nickname}</p>
+              <p className="text-[12px] text-muted-foreground">
+                {lang === 'ko' ? '사진을 탭하여 변경' : 'Tap to change photo'}
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label>{t('onboarding.nicknameLabel')}</Label>
             <Input
