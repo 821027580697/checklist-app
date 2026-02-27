@@ -1,17 +1,23 @@
 // Firebase 인증 관련 함수 — Google 전용
 import {
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
   User as FirebaseUser,
   updateProfile,
+  browserPopupRedirectResolver,
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './config';
 import { DEFAULT_USER_SETTINGS, DEFAULT_USER_STATS } from '@/types/user';
 
 const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({
+  prompt: 'select_account',
+});
 
 // Firebase 에러 메시지 매핑
 const getAuthErrorMessage = (error: unknown): string => {
@@ -24,15 +30,19 @@ const getAuthErrorMessage = (error: unknown): string => {
     case 'auth/network-request-failed':
       return '네트워크 오류가 발생했습니다. 인터넷 연결을 확인해주세요.';
     case 'auth/popup-closed-by-user':
-      return '로그인 팝업이 닫혔습니다. 다시 시도해주세요.';
+    case 'auth/cancelled-popup-request':
+    case 'auth/user-cancelled':
+      return ''; // 사용자가 직접 취소한 경우 에러 표시하지 않음
     case 'auth/popup-blocked':
-      return '팝업이 차단되었습니다. 팝업 차단을 해제해주세요.';
+      return 'POPUP_BLOCKED'; // 특수 마커 → redirect 폴백 트리거
     case 'auth/internal-error':
       return '내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
-    case 'auth/cancelled-popup-request':
-      return '';
+    case 'auth/unauthorized-domain':
+      return '이 도메인에서는 로그인할 수 없습니다. 관리자에게 문의해주세요.';
+    case 'auth/operation-not-allowed':
+      return 'Google 로그인이 활성화되지 않았습니다. Firebase Console에서 확인해주세요.';
     default:
-      return `로그인 오류가 발생했습니다. (${code || '알 수 없음'})`;
+      return `로그인 오류가 발생했습니다. (${code || firebaseError?.message || '알 수 없음'})`;
   }
 };
 
@@ -43,18 +53,72 @@ const ensureFirebase = () => {
   return null;
 };
 
-// Google 소셜 로그인
+// 모바일 환경 감지
+const isMobileDevice = () => {
+  if (typeof window === 'undefined') return false;
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent,
+  );
+};
+
+// Google 소셜 로그인 (Popup 우선, 실패 시 Redirect 폴백)
 export const signInWithGoogle = async () => {
   const configError = ensureFirebase();
-  if (configError) return { user: null, error: new Error(configError), message: configError };
+  if (configError)
+    return { user: null, error: new Error(configError), message: configError };
 
   try {
-    const result = await signInWithPopup(auth!, googleProvider);
+    // 모바일에서는 redirect 방식 사용 (팝업 차단 문제 회피)
+    if (isMobileDevice()) {
+      await signInWithRedirect(auth!, googleProvider);
+      // redirect 후에는 페이지가 새로고침되므로 여기에 도달하지 않음
+      return { user: null, error: null, message: null };
+    }
+
+    // 데스크탑: popup 방식 시도
+    const result = await signInWithPopup(auth!, googleProvider, browserPopupRedirectResolver);
     return { user: result.user, error: null, message: null };
   } catch (error) {
     const message = getAuthErrorMessage(error);
-    if (!message) return { user: null, error: null, message: null }; // cancelled popup
+
+    // 사용자 취소 → 에러 표시하지 않음
+    if (!message) {
+      return { user: null, error: null, message: null, cancelled: true };
+    }
+
+    // 팝업 차단 → redirect 폴백
+    if (message === 'POPUP_BLOCKED') {
+      try {
+        await signInWithRedirect(auth!, googleProvider);
+        return { user: null, error: null, message: null };
+      } catch (redirectError) {
+        const redirectMessage = getAuthErrorMessage(redirectError);
+        return {
+          user: null,
+          error: redirectError as Error,
+          message: redirectMessage || '로그인에 실패했습니다.',
+        };
+      }
+    }
+
     return { user: null, error: error as Error, message };
+  }
+};
+
+// 리다이렉트 결과 처리 (모바일/팝업차단 후 페이지 로드 시)
+export const handleRedirectResult = async () => {
+  const configError = ensureFirebase();
+  if (configError) return { user: null, error: null };
+
+  try {
+    const result = await getRedirectResult(auth!);
+    if (result?.user) {
+      return { user: result.user, error: null };
+    }
+    return { user: null, error: null };
+  } catch (error) {
+    console.error('Redirect result error:', error);
+    return { user: null, error: error as Error };
   }
 };
 
@@ -93,6 +157,7 @@ export const createUserDocument = async (
       settings: DEFAULT_USER_SETTINGS,
       followersCount: 0,
       followingCount: 0,
+      following: [],
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -141,10 +206,14 @@ export const checkUserExists = async (uid: string): Promise<boolean> => {
 };
 
 // 닉네임 중복 체크
-export const checkNicknameAvailable = async (nickname: string): Promise<boolean> => {
+export const checkNicknameAvailable = async (
+  nickname: string,
+): Promise<boolean> => {
   try {
     if (!db) return false;
-    const { collection, query, where, getDocs } = await import('firebase/firestore');
+    const { collection, query, where, getDocs } = await import(
+      'firebase/firestore'
+    );
     const q = query(collection(db, 'users'), where('nickname', '==', nickname));
     const snapshot = await getDocs(q);
     return snapshot.empty;
@@ -154,7 +223,9 @@ export const checkNicknameAvailable = async (nickname: string): Promise<boolean>
 };
 
 // 인증 상태 변경 리스너
-export const onAuthChange = (callback: (user: FirebaseUser | null) => void) => {
+export const onAuthChange = (
+  callback: (user: FirebaseUser | null) => void,
+) => {
   if (!auth) {
     callback(null);
     return () => {};

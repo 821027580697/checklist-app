@@ -3,7 +3,12 @@
 
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from '@/stores/authStore';
-import { onAuthChange, getUserDocument, checkUserExists } from '@/lib/firebase/auth';
+import {
+  onAuthChange,
+  getUserDocument,
+  checkUserExists,
+  handleRedirectResult,
+} from '@/lib/firebase/auth';
 import { isFirebaseConfigured } from '@/lib/firebase/config';
 import { User } from '@/types/user';
 
@@ -13,6 +18,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const setLoading = useAuthStore((state) => state.setLoading);
   const setNeedsOnboarding = useAuthStore((state) => state.setNeedsOnboarding);
   const processingRef = useRef(false);
+  const redirectCheckedRef = useRef(false);
 
   useEffect(() => {
     if (!isFirebaseConfigured) {
@@ -20,7 +26,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
 
+    // 모바일 redirect 결과 처리 (페이지 로드 시 1회)
+    if (!redirectCheckedRef.current) {
+      redirectCheckedRef.current = true;
+      handleRedirectResult().catch(() => {
+        // redirect 결과가 없어도 정상 — onAuthStateChanged가 처리
+      });
+    }
+
+    // Firebase 인증 상태 변경 리스너
     const unsubscribe = onAuthChange(async (firebaseUser) => {
+      // 이미 처리 중이면 무시
       if (processingRef.current) return;
       processingRef.current = true;
 
@@ -41,6 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 setLoading(false);
               }
             } else {
+              // 신규 사용자 → 온보딩 필요
               setNeedsOnboarding(true);
               setUser(null);
               setLoading(false);
@@ -51,6 +68,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setLoading(false);
           }
         } else {
+          // 로그아웃 상태
           setUser(null);
           setFirebaseUid(null);
           setNeedsOnboarding(false);
