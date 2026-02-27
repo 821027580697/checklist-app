@@ -22,7 +22,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useUIStore } from '@/stores/uiStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { signOut as nextAuthSignOut } from 'next-auth/react';
-import { userApi } from '@/lib/api/client';
+import { userApi, exportApi } from '@/lib/api/client';
 import imageCompression from 'browser-image-compression';
 import { toast } from 'sonner';
 import {
@@ -52,6 +52,7 @@ export default function SettingsPage() {
   const [bio, setBio] = useState(user?.bio || '');
   const [isSaving, setIsSaving] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const setUser = useAuthStore((state) => state.setUser);
@@ -109,6 +110,27 @@ export default function SettingsPage() {
     } finally {
       setIsUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  // 데이터 내보내기
+  const handleExportData = async () => {
+    setIsExporting(true);
+    try {
+      const blob = await exportApi.csv();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `questdo-data-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(lang === 'ko' ? 'CSV 파일이 다운로드되었습니다' : 'CSV file downloaded');
+    } catch {
+      toast.error(lang === 'ko' ? '내보내기에 실패했습니다' : 'Export failed');
+    } finally {
+      setIsExporting(false);
     }
   };
 
@@ -310,10 +332,26 @@ export default function SettingsPage() {
           <CardTitle className="text-base">{t('settings.account')}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button variant="outline" className="w-full rounded-xl justify-start">
-            <Download className="mr-2 h-4 w-4" />
-            {t('settings.dataExport')}
+          <Button
+            variant="outline"
+            className="w-full rounded-xl justify-start"
+            onClick={handleExportData}
+            disabled={isExporting}
+          >
+            {isExporting ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {isExporting
+              ? (lang === 'ko' ? '다운로드 중...' : 'Downloading...')
+              : t('settings.dataExport')}
           </Button>
+          <p className="text-[11px] text-muted-foreground px-1">
+            {lang === 'ko'
+              ? 'CSV 형식으로 다운로드됩니다. Google Sheets에서 열 수 있습니다.'
+              : 'Downloads as CSV. Can be opened in Google Sheets.'}
+          </p>
           <Separator />
           <Button
             variant="outline"

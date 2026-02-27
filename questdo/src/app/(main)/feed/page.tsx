@@ -1,4 +1,4 @@
-// 소셜 피드 — API 클라이언트 기반 (MongoDB)
+// 소셜 피드 — API 클라이언트 기반 (MongoDB) + 완전한 CRUD
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -19,7 +19,8 @@ import {
   Search,
   UserPlus,
   UserCheck,
-  X,
+  Trash2,
+  MoreHorizontal,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -61,6 +62,10 @@ export default function FeedPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [followingIds, setFollowingIds] = useState<string[]>([]);
 
+  // 삭제 확인
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
+  const [postMenuId, setPostMenuId] = useState<string | null>(null);
+
   // 팔로잉 목록 로드
   const loadFollowingIds = useCallback(async () => {
     if (!user) return;
@@ -99,7 +104,7 @@ export default function FeedPage() {
     if (!user || !postContent.trim()) return;
     setIsSubmittingPost(true);
     try {
-      await postApi.create({
+      const created = (await postApi.create({
         type: 'general',
         content: {
           text: postContent.trim(),
@@ -108,16 +113,32 @@ export default function FeedPage() {
           badgeRef: null,
           milestoneType: null,
         },
-      });
+      })) as unknown as Post;
+
+      // 낙관적으로 바로 추가 (서버에서 유저 정보가 채워져 반환됨)
+      setPosts((prev) => [created, ...prev]);
       setPostContent('');
       setShowCreatePost(false);
       toast.success(lang === 'ko' ? '게시글이 작성되었습니다' : 'Post created');
-      loadPosts();
     } catch (err) {
       console.error('Failed to create post:', err);
       toast.error(lang === 'ko' ? '게시글 작성에 실패했습니다' : 'Failed to create post');
     } finally {
       setIsSubmittingPost(false);
+    }
+  };
+
+  // 게시글 삭제 (본인만)
+  const handleDeletePost = async (postId: string) => {
+    try {
+      await postApi.delete(postId);
+      setPosts((prev) => prev.filter((p) => p.id !== postId));
+      setDeletingPostId(null);
+      setPostMenuId(null);
+      toast.success(lang === 'ko' ? '게시글이 삭제되었습니다' : 'Post deleted');
+    } catch (err) {
+      console.error('Failed to delete post:', err);
+      toast.error(lang === 'ko' ? '삭제에 실패했습니다' : 'Failed to delete');
     }
   };
 
@@ -150,7 +171,7 @@ export default function FeedPage() {
     } catch (err) {
       console.error('Failed to react:', err);
       toast.error(lang === 'ko' ? '반응 처리에 실패했습니다' : 'Failed to update reaction');
-      loadPosts(); // 롤백
+      loadPosts();
     }
   };
 
@@ -191,7 +212,7 @@ export default function FeedPage() {
 
       // 낙관적 댓글 ID를 실제 ID로 교체
       setComments((prev) =>
-        prev.map((c) => (c.id === optimisticComment.id ? { ...c, id: created.id || created._id || c.id } : c)),
+        prev.map((c) => (c.id === optimisticComment.id ? { ...created, id: created.id || created._id || c.id } : c)),
       );
 
       // 게시글 댓글 수 증가
@@ -207,6 +228,23 @@ export default function FeedPage() {
       toast.error(lang === 'ko' ? '댓글 작성에 실패했습니다' : 'Failed to add comment');
       setCommentText(trimmedText);
       loadComments(postId);
+    }
+  };
+
+  // 댓글 삭제 (본인만)
+  const handleDeleteComment = async (commentId: string, postId: string) => {
+    try {
+      await commentApi.delete(commentId);
+      setComments((prev) => prev.filter((c) => c.id !== commentId));
+      setPosts((prev) =>
+        prev.map((p) =>
+          p.id === postId ? { ...p, commentsCount: Math.max(0, (p.commentsCount || 0) - 1) } : p,
+        ),
+      );
+      toast.success(lang === 'ko' ? '댓글이 삭제되었습니다' : 'Comment deleted');
+    } catch (err) {
+      console.error('Failed to delete comment:', err);
+      toast.error(lang === 'ko' ? '삭제에 실패했습니다' : 'Failed to delete');
     }
   };
 
@@ -291,6 +329,17 @@ export default function FeedPage() {
     }
   };
 
+  // 아바타 렌더
+  const renderAvatar = (url: string | undefined, fallback: string, size = 'h-10 w-10') => (
+    <div className={`flex ${size} items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-lg shrink-0 overflow-hidden`}>
+      {url && (url.startsWith('http') || url.startsWith('data:')) ? (
+        <img src={url} alt="" className="h-full w-full object-cover" />
+      ) : (
+        <span className="text-white font-medium text-sm">{fallback}</span>
+      )}
+    </div>
+  );
+
   // 포스트 카드 렌더링 (공통)
   const renderPost = (post: Post, index: number) => (
     <motion.div
@@ -302,16 +351,10 @@ export default function FeedPage() {
       <div className="rounded-2xl border border-border/50 bg-card overflow-hidden p-5 transition-shadow hover:shadow-sm">
         {/* 포스트 헤더 */}
         <div className="flex items-center gap-3 mb-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-lg shrink-0 overflow-hidden">
-            {(post.userAvatar?.startsWith('http') || post.userAvatar?.startsWith('data:')) ? (
-              <img src={post.userAvatar} alt="" className="h-full w-full object-cover" />
-            ) : (
-              post.userAvatar || '?'
-            )}
-          </div>
+          {renderAvatar(post.userAvatar, post.userNickname?.charAt(0) || '?')}
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[14px] font-semibold tracking-tight truncate">{post.userNickname}</span>
+              <span className="text-[14px] font-semibold tracking-tight truncate dark:text-white">{post.userNickname}</span>
               <Badge variant="secondary" className="text-[10px] h-4 px-1.5 rounded-md font-medium shrink-0">
                 Lv.{post.userLevel}
               </Badge>
@@ -321,6 +364,35 @@ export default function FeedPage() {
             </div>
             <p className="text-[11px] text-muted-foreground">{getTimeAgo(post.createdAt)}</p>
           </div>
+
+          {/* 게시글 메뉴 (본인 게시글) */}
+          {user && post.userId === user.uid && (
+            <div className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 rounded-full text-muted-foreground"
+                onClick={() => setPostMenuId(postMenuId === post.id ? null : post.id)}
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </Button>
+              {postMenuId === post.id && (
+                <div className="absolute right-0 top-8 z-20 bg-popover border border-border rounded-xl shadow-lg py-1 min-w-[120px]">
+                  <button
+                    className="flex items-center gap-2 w-full px-3 py-2 text-[13px] text-[#FF3B30] hover:bg-secondary/50 transition-colors"
+                    onClick={() => {
+                      setDeletingPostId(post.id);
+                      setPostMenuId(null);
+                    }}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    {lang === 'ko' ? '삭제' : 'Delete'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* 팔로우 버튼 (내 게시글 아닌 경우) */}
           {user && post.userId !== user.uid && (
             <Button
@@ -344,19 +416,19 @@ export default function FeedPage() {
 
         {/* 연결된 할 일 / 배지 */}
         {post.content?.taskRef && (
-          <div className="mb-3 rounded-xl bg-[#34C759]/8 dark:bg-[#34C759]/15 p-3 text-[13px] font-medium">
+          <div className="mb-3 rounded-xl bg-[#34C759]/8 dark:bg-[#34C759]/15 p-3 text-[13px] font-medium dark:text-[#30D158]">
             ✅ &quot;{post.content.taskRef.title}&quot; {lang === 'ko' ? '완료!' : 'completed!'}
           </div>
         )}
         {post.content?.badgeRef && (
-          <div className="mb-3 rounded-xl bg-[#FF9500]/8 dark:bg-[#FF9500]/15 p-3 text-[13px] flex items-center gap-2 font-medium">
+          <div className="mb-3 rounded-xl bg-[#FF9500]/8 dark:bg-[#FF9500]/15 p-3 text-[13px] flex items-center gap-2 font-medium dark:text-[#FF9F0A]">
             <span className="text-lg">{post.content.badgeRef.icon}</span>
             {post.content.badgeRef.name} {lang === 'ko' ? '획득!' : 'earned!'}
           </div>
         )}
 
         {/* 본문 */}
-        <p className="text-[14px] leading-relaxed whitespace-pre-wrap">{post.content?.text}</p>
+        <p className="text-[14px] leading-relaxed whitespace-pre-wrap dark:text-gray-100">{post.content?.text}</p>
 
         {/* 리액션 바 */}
         <div className="flex items-center gap-4 pt-4 mt-4 border-t border-border/30">
@@ -419,20 +491,25 @@ export default function FeedPage() {
                   </p>
                 ) : (
                   comments.map((comment) => (
-                    <div key={comment.id} className="flex items-start gap-2">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF]/30 to-[#5856D6]/30 text-[10px] overflow-hidden">
-                        {(comment.userAvatar?.startsWith('http') || comment.userAvatar?.startsWith('data:')) ? (
-                          <img src={comment.userAvatar} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          comment.userAvatar || '?'
-                        )}
-                      </div>
+                    <div key={comment.id} className="flex items-start gap-2 group">
+                      {renderAvatar(comment.userAvatar, comment.userNickname?.charAt(0) || '?', 'h-6 w-6')}
                       <div className="flex-1 min-w-0">
                         <div className="rounded-xl bg-secondary dark:bg-[#2C2C2E] px-3 py-2">
-                          <span className="text-[11px] font-semibold">{comment.userNickname}</span>
-                          <p className="text-[12px] leading-relaxed mt-0.5">{comment.text}</p>
+                          <span className="text-[11px] font-semibold dark:text-white">{comment.userNickname}</span>
+                          <p className="text-[12px] leading-relaxed mt-0.5 dark:text-gray-200">{comment.text}</p>
                         </div>
-                        <p className="text-[10px] text-muted-foreground mt-1 pl-1">{getTimeAgo(comment.createdAt)}</p>
+                        <div className="flex items-center gap-2 mt-1 pl-1">
+                          <p className="text-[10px] text-muted-foreground">{getTimeAgo(comment.createdAt)}</p>
+                          {/* 본인 댓글만 삭제 가능 */}
+                          {user && comment.userId === user.uid && (
+                            <button
+                              onClick={() => handleDeleteComment(comment.id, post.id)}
+                              className="text-[10px] text-muted-foreground hover:text-[#FF3B30] transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              {lang === 'ko' ? '삭제' : 'Delete'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
                   ))
@@ -444,7 +521,7 @@ export default function FeedPage() {
                     value={commentText}
                     onChange={(e) => setCommentText(e.target.value)}
                     placeholder={lang === 'ko' ? '댓글을 입력하세요...' : 'Write a comment...'}
-                    className="flex-1 h-9 rounded-full text-[13px] bg-secondary dark:bg-[#2C2C2E] border-0"
+                    className="flex-1 h-9 rounded-full text-[13px] bg-secondary dark:bg-[#2C2C2E] border-0 dark:text-white dark:placeholder:text-gray-400"
                     maxLength={200}
                     onKeyDown={(e) => {
                       if (e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -481,7 +558,7 @@ export default function FeedPage() {
         className="flex items-center justify-between"
       >
         <div>
-          <h1 className="text-[28px] font-bold tracking-tight">{t('feed.title')}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight dark:text-white">{t('feed.title')}</h1>
           <p className="text-[13px] text-muted-foreground mt-0.5">
             {lang === 'ko' ? '함께 성장하는 커뮤니티' : 'Growing together'}
           </p>
@@ -538,7 +615,7 @@ export default function FeedPage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary dark:bg-[#2C2C2E] mb-4">
                 <Users className="h-7 w-7 text-muted-foreground" />
               </div>
-              <p className="text-[15px] font-medium">
+              <p className="text-[15px] font-medium dark:text-white">
                 {lang === 'ko' ? '아직 게시글이 없습니다' : 'No posts yet'}
               </p>
               <p className="text-[13px] text-muted-foreground mt-1.5">
@@ -565,7 +642,7 @@ export default function FeedPage() {
               <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary dark:bg-[#2C2C2E] mb-4">
                 <Users className="h-7 w-7 text-muted-foreground" />
               </div>
-              <p className="text-[15px] font-medium">
+              <p className="text-[15px] font-medium dark:text-white">
                 {lang === 'ko' ? '팔로잉 피드가 비어있습니다' : 'Following feed is empty'}
               </p>
               <p className="text-[13px] text-muted-foreground mt-1.5 max-w-xs">
@@ -588,6 +665,36 @@ export default function FeedPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* 게시글 삭제 확인 모달 */}
+      <Dialog open={!!deletingPostId} onOpenChange={() => setDeletingPostId(null)}>
+        <DialogContent className="sm:max-w-[340px] rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-[17px] text-center">
+              {lang === 'ko' ? '게시글을 삭제하시겠습니까?' : 'Delete this post?'}
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-[13px] text-muted-foreground text-center">
+            {lang === 'ko' ? '삭제된 게시글은 복구할 수 없습니다.' : 'This action cannot be undone.'}
+          </p>
+          <div className="flex gap-3 mt-2">
+            <Button
+              variant="outline"
+              className="flex-1 h-10 rounded-xl text-[14px]"
+              onClick={() => setDeletingPostId(null)}
+            >
+              {lang === 'ko' ? '취소' : 'Cancel'}
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 h-10 rounded-xl text-[14px]"
+              onClick={() => deletingPostId && handleDeletePost(deletingPostId)}
+            >
+              {lang === 'ko' ? '삭제' : 'Delete'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── 유저 검색 모달 ── */}
       <Dialog open={showSearch} onOpenChange={setShowSearch}>
@@ -637,15 +744,9 @@ export default function FeedPage() {
                       animate={{ opacity: 1, y: 0 }}
                       className="flex items-center gap-3 rounded-xl p-3 hover:bg-secondary/50 transition-all"
                     >
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-lg shrink-0 overflow-hidden">
-                        {(result.avatarUrl?.startsWith('http') || result.avatarUrl?.startsWith('data:')) ? (
-                          <img src={result.avatarUrl} alt="" className="h-full w-full object-cover" />
-                        ) : (
-                          result.nickname?.charAt(0) || '?'
-                        )}
-                      </div>
+                      {renderAvatar(result.avatarUrl, result.nickname?.charAt(0) || '?')}
                       <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-semibold truncate">{result.nickname}</p>
+                        <p className="text-[14px] font-semibold truncate dark:text-white">{result.nickname}</p>
                         <div className="flex items-center gap-2 mt-0.5">
                           <Badge variant="secondary" className="text-[10px] h-4 px-1.5 rounded-md">
                             Lv.{result.level || 1}
@@ -688,15 +789,9 @@ export default function FeedPage() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br from-[#007AFF] to-[#5856D6] text-sm overflow-hidden">
-                {(user?.avatarUrl?.startsWith('http') || user?.avatarUrl?.startsWith('data:')) ? (
-                  <img src={user.avatarUrl} alt="" className="h-full w-full object-cover" />
-                ) : (
-                  user?.nickname?.charAt(0) || '?'
-                )}
-              </div>
+              {renderAvatar(user?.avatarUrl, user?.nickname?.charAt(0) || '?', 'h-9 w-9')}
               <div>
-                <p className="text-[13px] font-semibold">{user?.nickname}</p>
+                <p className="text-[13px] font-semibold dark:text-white">{user?.nickname}</p>
                 <p className="text-[11px] text-muted-foreground">Lv.{user?.level || 1} · {user?.title || ''}</p>
               </div>
             </div>
@@ -705,7 +800,7 @@ export default function FeedPage() {
               value={postContent}
               onChange={(e) => setPostContent(e.target.value)}
               placeholder={lang === 'ko' ? '오늘의 성과나 생각을 공유해보세요...' : 'Share your thoughts...'}
-              className="min-h-[120px] rounded-xl resize-none text-[14px] bg-secondary dark:bg-[#2C2C2E] border-0 focus-visible:ring-1 focus-visible:ring-primary"
+              className="min-h-[120px] rounded-xl resize-none text-[14px] bg-secondary dark:bg-[#2C2C2E] border-0 focus-visible:ring-1 focus-visible:ring-primary dark:text-white dark:placeholder:text-gray-400"
               maxLength={300}
             />
 

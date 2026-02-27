@@ -225,6 +225,36 @@
   border: none !important;
 }
 
+/* ─── Dark mode typography enhancements ─── */
+.dark h1, .dark h2, .dark h3, .dark h4, .dark h5, .dark h6 {
+  color: #F5F5F7;
+}
+.dark p {
+  color: #E5E5EA;
+}
+.dark span {
+  color: inherit;
+}
+.dark .text-foreground {
+  color: #F5F5F7;
+}
+.dark label {
+  color: #E5E5EA;
+}
+.dark input, .dark textarea, .dark select {
+  color: #F5F5F7;
+}
+.dark input::placeholder, .dark textarea::placeholder {
+  color: #636366;
+}
+.dark .apple-card {
+  background: #1C1C1E;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+.dark .apple-section-alt {
+  background: #000000;
+}
+
 /* ─── Confetti animation (for gamification) ─── */
 @keyframes confetti-fall {
   0% {

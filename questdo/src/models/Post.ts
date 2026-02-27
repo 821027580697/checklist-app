@@ -51,5 +51,8 @@ const PostSchema = new Schema<IPost>(
   { timestamps: true },
 );
 
+PostSchema.index({ createdAt: -1 });
+PostSchema.index({ userId: 1, createdAt: -1 });
+
 export default (mongoose.models.Post as Model<IPost>) ||
   mongoose.model<IPost>('Post', PostSchema);

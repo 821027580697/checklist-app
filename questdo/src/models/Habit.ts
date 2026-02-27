@@ -45,5 +45,7 @@ const HabitSchema = new Schema<IHabit>(
   { timestamps: true },
 );
 
+HabitSchema.index({ userId: 1, createdAt: -1 });
+
 export default (mongoose.models.Habit as Model<IHabit>) ||
   mongoose.model<IHabit>('Habit', HabitSchema);

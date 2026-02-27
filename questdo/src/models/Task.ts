@@ -76,5 +76,9 @@ const TaskSchema = new Schema<ITask>(
   { timestamps: true },
 );
 
+TaskSchema.index({ userId: 1, status: 1, createdAt: -1 });
+TaskSchema.index({ userId: 1, category: 1 });
+TaskSchema.index({ userId: 1, dueDate: 1 });
+
 export default (mongoose.models.Task as Model<ITask>) ||
   mongoose.model<ITask>('Task', TaskSchema);

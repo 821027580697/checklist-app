@@ -55,6 +55,8 @@ export const commentApi = {
   list: (postId: string) => request<Record<string, unknown>[]>(`/api/comments?postId=${postId}`),
   create: (data: Record<string, unknown>) =>
     request<Record<string, unknown>>('/api/comments', { method: 'POST', body: JSON.stringify(data) }),
+  delete: (commentId: string) =>
+    request<{ success: boolean }>(`/api/comments?id=${commentId}`, { method: 'DELETE' }),
 };
 
 // ── Follows ──
@@ -73,4 +75,13 @@ export const userApi = {
   get: (id: string) => request<Record<string, unknown>>(`/api/users/${id}`),
   update: (data: Record<string, unknown>) =>
     request<Record<string, unknown>>('/api/users', { method: 'PUT', body: JSON.stringify(data) }),
+};
+
+// ── Data Export ──
+export const exportApi = {
+  csv: () =>
+    fetch('/api/export').then((res) => {
+      if (!res.ok) throw new Error('Export failed');
+      return res.blob();
+    }),
 };
