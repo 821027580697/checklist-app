@@ -5,11 +5,18 @@ import dbConnect from '@/lib/mongodb';
 import UserModel from '@/models/User';
 import { DEFAULT_USER_SETTINGS, DEFAULT_USER_STATS } from '@/types/user';
 
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.error('⚠️ GOOGLE_CLIENT_ID 환경변수가 설정되지 않았습니다.');
+}
+if (!process.env.GOOGLE_CLIENT_SECRET) {
+  console.error('⚠️ GOOGLE_CLIENT_SECRET 환경변수가 설정되지 않았습니다.');
+}
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      clientId: process.env.GOOGLE_CLIENT_ID || '',
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
       authorization: {
         params: {
           prompt: 'select_account',
