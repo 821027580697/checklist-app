@@ -6,16 +6,17 @@ import { HabitCard } from '@/components/habits/HabitCard';
 import { useHabitStore } from '@/stores/habitStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Habit } from '@/types/habit';
-import { Repeat, CheckCircle2, Hand } from 'lucide-react';
+import { Repeat, CheckCircle2, Hand, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { format } from 'date-fns';
 import { motion } from 'framer-motion';
 
 interface HabitCheckProps {
   onToggleCheck: (habit: Habit) => void;
+  onAddHabit?: () => void;
 }
 
-export const HabitCheck = ({ onToggleCheck }: HabitCheckProps) => {
+export const HabitCheck = ({ onToggleCheck, onAddHabit }: HabitCheckProps) => {
   const { t, language } = useTranslation();
   const lang = language as 'ko' | 'en';
   const getTodayHabits = useHabitStore((state) => state.getTodayHabits);
@@ -38,11 +39,24 @@ export const HabitCheck = ({ onToggleCheck }: HabitCheckProps) => {
             </p>
           )}
         </div>
-        <Link href="/habits">
-          <Button variant="ghost" size="sm" className="text-[12px] h-7 rounded-lg text-primary font-medium">
-            {t('common.seeAll')}
-          </Button>
-        </Link>
+        <div className="flex items-center gap-1">
+          {onAddHabit && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-[12px] h-7 rounded-lg text-primary font-medium"
+              onClick={onAddHabit}
+            >
+              <Plus className="h-3.5 w-3.5 mr-0.5" />
+              {t('common.add')}
+            </Button>
+          )}
+          <Link href="/tasks?tab=habits">
+            <Button variant="ghost" size="sm" className="text-[12px] h-7 rounded-lg text-primary font-medium">
+              {t('common.seeAll')}
+            </Button>
+          </Link>
+        </div>
       </div>
       <div className="px-5 pb-5">
         {isLoading ? (
@@ -55,11 +69,17 @@ export const HabitCheck = ({ onToggleCheck }: HabitCheckProps) => {
             <p className="text-[13px] text-muted-foreground">
               {lang === 'ko' ? '오늘 체크할 습관이 없습니다' : 'No habits to check today'}
             </p>
-            <Link href="/habits">
-              <Button variant="link" size="sm" className="text-[12px] text-primary mt-1">
+            {onAddHabit ? (
+              <Button variant="link" size="sm" className="text-[12px] text-primary mt-1" onClick={onAddHabit}>
                 {lang === 'ko' ? '습관 추가하기' : 'Add a habit'}
               </Button>
-            </Link>
+            ) : (
+              <Link href="/tasks?tab=habits">
+                <Button variant="link" size="sm" className="text-[12px] text-primary mt-1">
+                  {lang === 'ko' ? '습관 추가하기' : 'Add a habit'}
+                </Button>
+              </Link>
+            )}
           </div>
         ) : allChecked ? (
           <motion.div

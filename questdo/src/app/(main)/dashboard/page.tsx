@@ -1,4 +1,4 @@
-// 홈 대시보드 — Apple 스타일 (완전 CRUD 지원)
+// 홈 대시보드 — 할 일+습관 전체 표시, Apple 스타일
 'use client';
 
 import { useState } from 'react';
@@ -9,20 +9,27 @@ import { TodayTasks } from '@/components/dashboard/TodayTasks';
 import { HabitCheck } from '@/components/dashboard/HabitCheck';
 import { QuickAddTask } from '@/components/dashboard/QuickAddTask';
 import { TaskForm } from '@/components/tasks/TaskForm';
+import { HabitForm } from '@/components/habits/HabitForm';
 import { useTasks } from '@/hooks/useTasks';
 import { useHabits } from '@/hooks/useHabits';
 import { useAuthStore } from '@/stores/authStore';
 import { useTranslation } from '@/hooks/useTranslation';
 import { Task, TaskCategory, TaskPriority } from '@/types/task';
+import { HabitFrequencyType } from '@/types/habit';
 import { Timestamp } from 'firebase/firestore';
+import { Plus, CheckSquare, Repeat } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 
 export default function DashboardPage() {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
+  const lang = language as 'ko' | 'en';
   const user = useAuthStore((state) => state.user);
   const { createTask, toggleComplete, editTask, deleteTask } = useTasks();
-  const { toggleTodayCheck } = useHabits();
+  const { toggleTodayCheck, createHabit } = useHabits();
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [showHabitForm, setShowHabitForm] = useState(false);
 
   const handleQuickAdd = (title: string) => {
     createTask({
@@ -64,6 +71,32 @@ export default function DashboardPage() {
     setEditingTask(null);
   };
 
+  const handleCreateHabit = (data: {
+    title: string;
+    description: string;
+    category: TaskCategory;
+    icon: string;
+    color: string;
+    frequencyType: HabitFrequencyType;
+    daysOfWeek: number[];
+    reminderTime: string;
+  }) => {
+    createHabit({
+      title: data.title,
+      description: data.description,
+      category: data.category,
+      icon: data.icon,
+      color: data.color,
+      frequency: {
+        type: data.frequencyType,
+        daysOfWeek: data.daysOfWeek,
+        timesPerWeek: data.frequencyType === 'weekly' ? data.daysOfWeek.length : 7,
+      },
+      reminderTime: data.reminderTime || null,
+      isActive: true,
+    });
+  };
+
   return (
     <div className="space-y-5">
       {/* 인사말 */}
@@ -86,15 +119,61 @@ export default function DashboardPage() {
       {/* 빠른 할 일 추가 */}
       <QuickAddTask onAdd={handleQuickAdd} />
 
-      {/* 오늘의 할 일 & 습관 */}
-      <div className="grid gap-3 md:grid-cols-2">
+      {/* 오늘의 할 일 — 전체 표시 */}
+      <div>
         <TodayTasks
           onToggleComplete={toggleComplete}
           onEdit={(task) => setEditingTask(task)}
           onDelete={(taskId) => deleteTask(taskId)}
         />
-        <HabitCheck onToggleCheck={toggleTodayCheck} />
       </div>
+
+      {/* 오늘의 습관 — 전체 표시 */}
+      <div>
+        <HabitCheck
+          onToggleCheck={toggleTodayCheck}
+          onAddHabit={() => setShowHabitForm(true)}
+        />
+      </div>
+
+      {/* 전체 보기 바로가기 */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+        className="flex gap-3"
+      >
+        <Link href="/tasks" className="flex-1">
+          <div className="apple-card p-4 flex items-center gap-3 hover:bg-secondary/30 transition-colors cursor-pointer group">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <CheckSquare className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-semibold tracking-tight group-hover:text-primary transition-colors">
+                {lang === 'ko' ? '전체 할 일 관리' : 'Manage All Tasks'}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {lang === 'ko' ? '필터, 정렬, 편집' : 'Filter, sort, edit'}
+              </p>
+            </div>
+          </div>
+        </Link>
+        <Link href="/tasks?tab=habits" className="flex-1">
+          <div className="apple-card p-4 flex items-center gap-3 hover:bg-secondary/30 transition-colors cursor-pointer group">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#34C759]/10 text-[#34C759]">
+              <Repeat className="h-5 w-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[14px] font-semibold tracking-tight group-hover:text-[#34C759] transition-colors">
+                {lang === 'ko' ? '전체 습관 관리' : 'Manage All Habits'}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {lang === 'ko' ? '스트릭, 진행률' : 'Streaks, progress'}
+              </p>
+            </div>
+          </div>
+        </Link>
+      </motion.div>
 
       {/* 할 일 편집 모달 */}
       {editingTask && (
@@ -117,6 +196,13 @@ export default function DashboardPage() {
           isEdit
         />
       )}
+
+      {/* 습관 추가 모달 */}
+      <HabitForm
+        open={showHabitForm}
+        onClose={() => setShowHabitForm(false)}
+        onSubmit={handleCreateHabit}
+      />
     </div>
   );
 }

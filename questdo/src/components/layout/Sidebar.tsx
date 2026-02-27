@@ -7,7 +7,6 @@ import { motion } from 'framer-motion';
 import {
   LayoutDashboard,
   CheckSquare,
-  Repeat,
   CalendarDays,
   Rss,
   Trophy,
@@ -27,7 +26,6 @@ import { Sheet, SheetContent } from '@/components/ui/sheet';
 const getNavItems = (t: (key: string) => string) => [
   { href: '/dashboard', icon: LayoutDashboard, label: t('nav.home') },
   { href: '/tasks', icon: CheckSquare, label: t('nav.tasks') },
-  { href: '/habits', icon: Repeat, label: t('nav.habits') },
   { href: '/calendar', icon: CalendarDays, label: t('nav.calendar') },
   { href: '/feed', icon: Rss, label: t('nav.feed') },
   { href: '/achievements', icon: Trophy, label: t('nav.achievements') },
